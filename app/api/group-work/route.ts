@@ -1,3 +1,5 @@
+export const runtime = "nodejs";
+
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { runGroupWorkPhase, type GroupWorkAgent, type GroupWorkPhase } from "@/lib/ai/group-work-engine";
 

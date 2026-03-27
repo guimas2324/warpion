@@ -1,3 +1,5 @@
+export const runtime = "nodejs";
+
 import { streamText } from "ai";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getProviderModel } from "@/lib/ai/providers";
