@@ -8,6 +8,7 @@ import { ModelSelector } from "@/components/chat/ModelSelector";
 import { InputBar } from "@/components/chat/InputBar";
 import { MessageBubble } from "@/components/chat/MessageBubble";
 import { ImageGenerationCard } from "@/components/chat/ImageGenerationCard";
+import { MediaToolbar } from "@/components/chat/MediaToolbar";
 import { useChatStore } from "@/stores/chat-store";
 import { useModelStore } from "@/stores/model-store";
 import type { ChatAttachment } from "@/types/chat";
@@ -64,6 +65,7 @@ export function ChatPanel() {
   const setModels = useModelStore((s) => s.setModels);
   const [lastPrompt, setLastPrompt] = useState<string>("");
   const [error, setError] = useState<string>("");
+  const [audioByMessageId, setAudioByMessageId] = useState<Record<string, string>>({});
   const [planTokensMonthly, setPlanTokensMonthly] = useState<number>(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -248,6 +250,87 @@ export function ChatPanel() {
           <ModelSelector autoDetails={latestAutoInfo} />
         </div>
       </div>
+      <MediaToolbar
+        onGenerateImage={() => {
+          const prompt = window.prompt("Prompt da imagem:");
+          if (!prompt) return;
+          setLastPrompt(`/image ${prompt}`);
+          setError("");
+          setMessages([
+            ...messages,
+            { id: `img-user-${Date.now()}`, role: "user", parts: [{ type: "text", text: `/image ${prompt}` }] },
+          ]);
+          void (async () => {
+            try {
+              const response = await fetch("/api/media/image", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ prompt, model: "gpt-image" }),
+              });
+              const payload = (await response.json()) as {
+                data?: { url?: string; model?: string; prompt?: string };
+                error?: string;
+              };
+              if (!response.ok || !payload.data?.url || !payload.data.model) {
+                setError(payload.error ?? "Falha ao gerar imagem.");
+                return;
+              }
+              const imageData = payload.data;
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: `img-assistant-${Date.now()}`,
+                  role: "assistant",
+                  parts: [{ type: "text", text: "Imagem gerada com sucesso." }],
+                  metadata: {
+                    generated_image_url: imageData.url,
+                    generated_image_model: imageData.model,
+                    generated_image_prompt: imageData.prompt ?? prompt,
+                  },
+                },
+              ]);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Falha ao gerar imagem.");
+            }
+          })();
+        }}
+        onGenerateAudio={() => {
+          const text = window.prompt("Texto para gerar audio:");
+          if (!text) return;
+          void (async () => {
+            try {
+              const response = await fetch("/api/media/tts", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ text, model: "openai-tts", voice: "nova" }),
+              });
+              const payload = (await response.json()) as {
+                data?: { url?: string; model?: string; voice?: string };
+                error?: string;
+              };
+              if (!response.ok || !payload.data?.url) {
+                setError(payload.error ?? "Falha ao gerar audio.");
+                return;
+              }
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: `tts-assistant-${Date.now()}`,
+                  role: "assistant",
+                  parts: [{ type: "text", text: "Audio gerado com sucesso." }],
+                  metadata: {
+                    generated_audio_url: payload.data?.url,
+                    generated_audio_model: payload.data?.model,
+                    generated_audio_voice: payload.data?.voice,
+                  },
+                },
+              ]);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Falha ao gerar audio.");
+            }
+          })();
+        }}
+      />
 
       <div ref={scrollRef} className="mb-3 flex-1 space-y-3 overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-950/50 p-3">
         {messages.map((m: UIMessage) => {
@@ -255,6 +338,7 @@ export function ChatPanel() {
           const generatedImageUrl = typeof meta.generated_image_url === "string" ? meta.generated_image_url : undefined;
           const generatedImageModel = typeof meta.generated_image_model === "string" ? meta.generated_image_model : undefined;
           const generatedImagePrompt = typeof meta.generated_image_prompt === "string" ? meta.generated_image_prompt : undefined;
+          const generatedAudioUrl = typeof meta.generated_audio_url === "string" ? meta.generated_audio_url : undefined;
           if (m.role === "assistant" && generatedImageUrl && generatedImageModel) {
             return (
               <div key={m.id} className="flex justify-start">
@@ -276,6 +360,32 @@ export function ChatPanel() {
               tokens={Number(meta.tokens_input ?? 0) + Number(meta.tokens_output ?? 0)}
               tokensInput={Number(meta.tokens_input ?? 0)}
               tokensOutput={Number(meta.tokens_output ?? 0)}
+              audioUrl={audioByMessageId[m.id] ?? generatedAudioUrl}
+              onSpeak={
+                m.role === "assistant"
+                  ? () => {
+                      const existing = audioByMessageId[m.id];
+                      if (existing) return;
+                      void (async () => {
+                        try {
+                          const response = await fetch("/api/media/tts", {
+                            method: "POST",
+                            headers: { "content-type": "application/json" },
+                            body: JSON.stringify({ text: getMessageText(m), model: "openai-tts", voice: "nova" }),
+                          });
+                          const payload = (await response.json()) as { data?: { url?: string }; error?: string };
+                          if (!response.ok || !payload.data?.url) {
+                            setError(payload.error ?? "Falha ao gerar audio.");
+                            return;
+                          }
+                          setAudioByMessageId((prev) => ({ ...prev, [m.id]: payload.data?.url ?? "" }));
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : "Falha ao gerar audio.");
+                        }
+                      })();
+                    }
+                  : undefined
+              }
               attachments={Array.isArray(meta.attachments) ? (meta.attachments as ChatAttachment[]) : undefined}
               onRegenerate={
                 m.role === "assistant" && lastPrompt

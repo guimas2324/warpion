@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatAttachment } from "@/types/chat";
 import { useChatStore } from "@/stores/chat-store";
 import { useModelStore } from "@/stores/model-store";
+import { VoiceRecorder } from "@/components/chat/VoiceRecorder";
 
 const MAX_ATTACHMENT_SIZE_BYTES = 50 * 1024 * 1024;
 const MAX_ATTACHMENTS_PER_MESSAGE = 5;
@@ -263,6 +264,13 @@ export function InputBar({
           accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,text/markdown,text/csv,application/json,.py,.js,.ts,.xlsx,.docx"
         />
       </label>
+      <VoiceRecorder
+        onTranscribed={(text) => {
+          setValue((prev) => (prev ? `${prev}\n${text}` : text));
+          requestAnimationFrame(resizeTextarea);
+          textareaRef.current?.focus();
+        }}
+      />
       {isStreaming ? (
         <button
           type="button"

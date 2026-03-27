@@ -2,6 +2,7 @@
 
 import { MarkdownRenderer } from "@/components/shared/MarkdownRenderer";
 import type { ChatAttachment } from "@/types/chat";
+import { AudioPlayer } from "@/components/chat/AudioPlayer";
 
 export function MessageBubble({
   role,
@@ -12,6 +13,8 @@ export function MessageBubble({
   tokens,
   tokensInput,
   tokensOutput,
+  audioUrl,
+  onSpeak,
   thinkingPhase,
   onRegenerate,
 }: {
@@ -23,6 +26,8 @@ export function MessageBubble({
   tokens?: number;
   tokensInput?: number;
   tokensOutput?: number;
+  audioUrl?: string;
+  onSpeak?: () => void;
   thinkingPhase?: string;
   onRegenerate?: () => void;
 }) {
@@ -103,6 +108,7 @@ export function MessageBubble({
             {model ? ` • via ${model}` : ""}
           </div>
         ) : null}
+        {!isUser && audioUrl ? <AudioPlayer url={audioUrl} /> : null}
         {!isUser && (
           <div className="mt-3 flex gap-2 text-xs">
             <button onClick={() => navigator.clipboard.writeText(content)} className="rounded border border-zinc-600 px-2 py-0.5 hover:bg-zinc-800">
@@ -111,6 +117,11 @@ export function MessageBubble({
             {onRegenerate ? (
               <button onClick={onRegenerate} className="rounded border border-zinc-600 px-2 py-0.5 hover:bg-zinc-800">
                 Regenerate
+              </button>
+            ) : null}
+            {onSpeak ? (
+              <button onClick={onSpeak} className="rounded border border-zinc-600 px-2 py-0.5 hover:bg-zinc-800">
+                🔊 Ouvir
               </button>
             ) : null}
             <button className="rounded border border-zinc-600 px-2 py-0.5 hover:bg-zinc-800">👍</button>
