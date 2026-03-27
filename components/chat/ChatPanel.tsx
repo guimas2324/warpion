@@ -185,6 +185,7 @@ export function ChatPanel() {
         event.preventDefault();
         setSelectedConversationId(undefined);
         setMessages([]);
+        window.dispatchEvent(new Event("warpion:focus-input"));
       }
       if (event.key === "Escape") {
         stop();
@@ -193,6 +194,16 @@ export function ChatPanel() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [setMessages, setSelectedConversationId, stop]);
+
+  useEffect(() => {
+    const handler = () => {
+      setSelectedConversationId(undefined);
+      setMessages([]);
+      window.dispatchEvent(new Event("warpion:focus-input"));
+    };
+    window.addEventListener("warpion:new-chat", handler);
+    return () => window.removeEventListener("warpion:new-chat", handler);
+  }, [setMessages, setSelectedConversationId]);
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col p-4">
@@ -239,10 +250,10 @@ export function ChatPanel() {
             <div className="mb-4 text-sm text-zinc-400">Como posso ajudar?</div>
             <div className="grid gap-2 md:grid-cols-2">
               {[
-                "Refatore este trecho TypeScript com foco em performance",
-                "Crie um plano de execucao para uma API em 3 fases",
-                "Analise estes requisitos e aponte riscos tecnicos",
-                "Escreva um resumo executivo em portugues",
+                "[Code] Refatore este trecho TypeScript com foco em performance",
+                "[Plan] Crie um plano de execucao para uma API em 3 fases",
+                "[Data] Analise estes requisitos e aponte riscos tecnicos",
+                "[Write] Escreva um resumo executivo em portugues",
               ].map((suggestion) => (
                 <button
                   key={suggestion}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatAttachment } from "@/types/chat";
 
 export function InputBar({
@@ -82,6 +82,12 @@ export function InputBar({
       e.target.value = "";
     }
   }
+
+  useEffect(() => {
+    const focusHandler = () => textareaRef.current?.focus();
+    window.addEventListener("warpion:focus-input", focusHandler);
+    return () => window.removeEventListener("warpion:focus-input", focusHandler);
+  }, []);
 
   return (
     <form onSubmit={submit} className="flex gap-2">
