@@ -107,13 +107,13 @@ async function generateConversationTitle(params: {
 
 export async function POST(request: Request) {
   const supabase = await createSupabaseServerClient();
-  const admin = createSupabaseAdminClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return new Response(JSON.stringify({ data: null, error: "Unauthorized", meta: {} }), { status: 401 });
 
   try {
+    const admin = createSupabaseAdminClient();
     const raw = (await request.json()) as {
       message?: unknown;
       messages?: unknown;
