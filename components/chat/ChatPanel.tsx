@@ -7,6 +7,7 @@ import { ModeToggle } from "@/components/chat/ModeToggle";
 import { ModelSelector } from "@/components/chat/ModelSelector";
 import { InputBar } from "@/components/chat/InputBar";
 import { MessageBubble } from "@/components/chat/MessageBubble";
+import { ImageGenerationCard } from "@/components/chat/ImageGenerationCard";
 import { useChatStore } from "@/stores/chat-store";
 import { useModelStore } from "@/stores/model-store";
 import type { ChatAttachment } from "@/types/chat";
@@ -251,6 +252,20 @@ export function ChatPanel() {
       <div ref={scrollRef} className="mb-3 flex-1 space-y-3 overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-950/50 p-3">
         {messages.map((m: UIMessage) => {
           const meta = (m.metadata ?? {}) as Record<string, unknown>;
+          const generatedImageUrl = typeof meta.generated_image_url === "string" ? meta.generated_image_url : undefined;
+          const generatedImageModel = typeof meta.generated_image_model === "string" ? meta.generated_image_model : undefined;
+          const generatedImagePrompt = typeof meta.generated_image_prompt === "string" ? meta.generated_image_prompt : undefined;
+          if (m.role === "assistant" && generatedImageUrl && generatedImageModel) {
+            return (
+              <div key={m.id} className="flex justify-start">
+                <ImageGenerationCard
+                  imageUrl={generatedImageUrl}
+                  model={generatedImageModel}
+                  prompt={generatedImagePrompt}
+                />
+              </div>
+            );
+          }
           return (
             <MessageBubble
               key={m.id}
@@ -352,6 +367,51 @@ export function ChatPanel() {
         onSend={(value, attachments) => {
           setLastPrompt(value);
           setError("");
+          if (value.toLowerCase().startsWith("/image ")) {
+            const prompt = value.slice(7).trim();
+            if (!prompt) {
+              setError("Prompt de imagem vazio. Use: /image seu prompt");
+              return;
+            }
+            setMessages([
+              ...messages,
+              { id: `img-user-${Date.now()}`, role: "user", parts: [{ type: "text", text: value }] },
+            ]);
+            void (async () => {
+              try {
+                const response = await fetch("/api/media/image", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ prompt, model: "gpt-image" }),
+                });
+                const payload = (await response.json()) as {
+                  data?: { url?: string; model?: string; prompt?: string };
+                  error?: string;
+                };
+                if (!response.ok || !payload.data?.url || !payload.data.model) {
+                  setError(payload.error ?? "Falha ao gerar imagem.");
+                  return;
+                }
+                const imageData = payload.data;
+                setMessages((prev) => [
+                  ...prev,
+                  {
+                    id: `img-assistant-${Date.now()}`,
+                    role: "assistant",
+                    parts: [{ type: "text", text: "Imagem gerada com sucesso." }],
+                    metadata: {
+                      generated_image_url: imageData.url,
+                      generated_image_model: imageData.model,
+                      generated_image_prompt: imageData.prompt ?? prompt,
+                    },
+                  },
+                ]);
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Falha ao gerar imagem.");
+              }
+            })();
+            return;
+          }
           sendMessage({ text: value }, { body: { ...body, attachments } });
         }}
       />
