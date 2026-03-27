@@ -21,6 +21,14 @@ type ProcessParams = {
   conversationId?: string;
   requestIp?: string;
   userAgent?: string;
+  persistAssistantMessage?: (params: {
+    text: string;
+    selectedModelId: string;
+    provider: string;
+    taskType: TaskType;
+    inputTokens: number;
+    outputTokens: number;
+  }) => Promise<void>;
 };
 
 type EngineResult = {
@@ -64,6 +72,7 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
     conversationId,
     requestIp,
     userAgent,
+    persistAssistantMessage,
   } = params;
 
   const intent = await decodeIntent({
@@ -126,6 +135,17 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
       const { data: debitResult, error: debitError } = await admin.rpc("debit_tokens", debitPayload);
       if (debitError) throw debitError;
 
+      if (persistAssistantMessage) {
+        await persistAssistantMessage({
+          text,
+          selectedModelId,
+          provider: modelRow.provider,
+          taskType: intent.task_type,
+          inputTokens: tokens.inputTokens,
+          outputTokens: tokens.outputTokens,
+        });
+      }
+
       await admin.from("token_usage_log").insert({
         user_id: userId,
         conversation_id: conversationId ?? null,
@@ -163,7 +183,7 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
           ].join("\n"),
         });
 
-        await admin.rpc("log_audit", {
+        await admin.schema("private").rpc("log_audit", {
           user_id: userId,
           action: "quality_gate_retry",
           resource_type: "chat_message",
@@ -177,7 +197,7 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
         });
       }
 
-      await admin.rpc("log_audit", {
+      await admin.schema("private").rpc("log_audit", {
         user_id: userId,
         action: "intelligence_engine_processed",
         resource_type: "chat",

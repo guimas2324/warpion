@@ -1,22 +1,23 @@
 export const runtime = "nodejs";
 
-import { streamText } from "ai";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getProviderModel } from "@/lib/ai/providers";
-import { resolveModelId } from "@/lib/ai/model-router";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { ChatRequestPayload } from "@/types/chat";
-import { recordUsageAndDebit } from "@/lib/ai/token-ledger";
-import { extractTokenUsage } from "@/lib/ai/usage";
+import { processWithIntelligenceEngine } from "@/lib/ai/intelligence-engine";
+
+function getClientIp(request: Request) {
+  const header = request.headers.get("x-forwarded-for");
+  if (!header) return null;
+  return header.split(",")[0]?.trim() || null;
+}
 
 export async function POST(request: Request) {
   const supabase = await createSupabaseServerClient();
+  const admin = createSupabaseAdminClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return new Response(JSON.stringify({ data: null, error: "Unauthorized", meta: {} }), { status: 401 });
-
-  let conversationId: string | undefined;
-  let selectedModel = "";
 
   try {
     const body = (await request.json()) as ChatRequestPayload;
@@ -33,34 +34,24 @@ export async function POST(request: Request) {
       return new Response(JSON.stringify({ data: null, error: "Insufficient tokens", meta: {} }), { status: 402 });
     }
 
-    const route = await resolveModelId({
-      mode: body.mode,
-      modelId: body.model_id,
-      message,
-      supabase,
-    });
-    selectedModel = route.modelId;
+    const clientIp = getClientIp(request);
+    const userAgent = request.headers.get("user-agent");
+    const { data: allowed, error: rateError } = await admin
+      .schema("private")
+      .rpc("check_rate_limit", {
+        user_id: user.id,
+        ip: clientIp,
+        endpoint: "/api/chat",
+        max_requests: 120,
+        window_minutes: 5,
+      });
 
-    const { data: modelRow, error: modelError } = await supabase
-      .from("model_catalog")
-      .select("id, provider")
-      .eq("id", selectedModel)
-      .single();
-    if (modelError || !modelRow) throw modelError ?? new Error("Model not found");
+    if (rateError) throw rateError;
+    if (!allowed) {
+      return new Response(JSON.stringify({ data: null, error: "Rate limit exceeded", meta: {} }), { status: 429 });
+    }
 
-    const { data: skills, error: skillError } = await supabase
-      .from("skills")
-      .select("name, system_prompt, category, is_active")
-      .eq("is_active", true)
-      .in("category", ["core", "task"])
-      .order("priority", { ascending: true });
-    if (skillError) throw skillError;
-
-    const systemPrompt = [
-      "You are WARPION Chat Otimizado. Be precise, practical, and safe.",
-      ...(skills ?? []).map((s) => `${s.name}: ${s.system_prompt ?? ""}`),
-    ].join("\n\n");
-
+    let conversationId = body.conversation_id;
     if (!body.conversation_id) {
       const { data: createdConv, error: convError } = await supabase
         .from("conversations")
@@ -69,77 +60,69 @@ export async function POST(request: Request) {
           tool_type: "chat",
           title: message.split("\n")[0].slice(0, 80),
           mode: body.mode,
-          model_used: selectedModel,
+          model_used: null,
           status: "active",
         })
         .select("id")
         .single();
       if (convError) throw convError;
       conversationId = createdConv.id;
-    } else {
-      conversationId = body.conversation_id;
     }
 
     await supabase.from("messages").insert({
       conversation_id: conversationId,
       role: "user",
       content: message,
-      model: selectedModel,
-      provider: modelRow.provider,
+      model: body.model_id ?? null,
+      provider: null,
       phase: body.mode,
       attachments: body.attachments ?? [],
     });
 
-    const model = getProviderModel(modelRow.provider, selectedModel);
-    const messages = [
-      ...(body.history ?? []).map((m) => ({
-        role: m.role as "user" | "assistant" | "system",
-        content: m.content,
-      })),
-      { role: "user" as const, content: message },
-    ];
-
-    const abort = new AbortController();
-    const timeout = setTimeout(() => abort.abort("timeout"), 30_000);
-
-    const result = streamText({
-      model,
-      system: systemPrompt,
-      messages,
-      abortSignal: abort.signal,
-      onFinish: async ({ text, usage }) => {
-        clearTimeout(timeout);
-        const tokens = extractTokenUsage(usage);
+    const engine = await processWithIntelligenceEngine({
+      supabase,
+      userId: user.id,
+      message,
+      mode: body.mode,
+      modelId: body.model_id,
+      history: body.history ?? [],
+      toolType: "chat",
+      conversationId,
+      requestIp: clientIp ?? undefined,
+      userAgent: userAgent ?? undefined,
+      persistAssistantMessage: async (params) => {
         await supabase.from("messages").insert({
           conversation_id: conversationId,
           role: "assistant",
-          content: text,
-          model: selectedModel,
-          provider: modelRow.provider,
-          tokens_input: tokens.inputTokens,
-          tokens_output: tokens.outputTokens,
+          content: params.text,
+          model: params.selectedModelId,
+          provider: params.provider,
+          tokens_input: params.inputTokens,
+          tokens_output: params.outputTokens,
           phase: body.mode,
-          metadata: { routed_task_type: route.taskType, mode: route.mode },
+          metadata: {
+            routed_task_type: params.taskType,
+            mode: body.mode,
+            intent_reasoning: params.taskType,
+          },
         });
 
-        await recordUsageAndDebit({
-          userId: user.id,
-          conversationId: conversationId ?? "",
-          modelId: selectedModel,
-          provider: modelRow.provider,
-          inputTokens: tokens.inputTokens,
-          outputTokens: tokens.outputTokens,
-          toolType: "chat",
-          phase: route.taskType,
-        });
+        await supabase
+          .from("conversations")
+          .update({
+            model_used: params.selectedModelId,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", conversationId);
       },
     });
 
-    return result.toUIMessageStreamResponse({
+    return engine.streamResult.toUIMessageStreamResponse({
       headers: {
         "x-conversation-id": conversationId ?? "",
-        "x-selected-model": selectedModel,
-        "x-selected-task": route.taskType,
+        "x-selected-model": engine.selectedModelId,
+        "x-selected-task": engine.taskType,
+        "x-intent-reasoning": engine.intentReasoning,
       },
     });
   } catch (error) {
