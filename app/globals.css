@@ -2,11 +2,17 @@
 
 :root {
   --background: #09090b;
-  --foreground: #e4e4e7;
+  --foreground: #fafafa;
   --card: #18181b;
+  --card-elevated: #27272a;
   --primary: #6366f1;
-  --border: #3f3f46;
+  --primary-hover: #818cf8;
+  --border: #27272a;
+  --border-secondary: #3f3f46;
   --code-bg: #1e1e2e;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --glow: rgba(99, 102, 241, 0.15);
 }
 
 @theme inline {
@@ -31,6 +37,151 @@ body {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(99, 102, 241, 0.25);
+  }
+}
+
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes count-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.animate-on-scroll {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+}
+
+.animate-on-scroll.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.animate-on-scroll.delay-100 {
+  transition-delay: 100ms;
+}
+
+.animate-on-scroll.delay-200 {
+  transition-delay: 200ms;
+}
+
+.animate-on-scroll.delay-300 {
+  transition-delay: 300ms;
+}
+
+.animate-on-scroll.delay-400 {
+  transition-delay: 400ms;
+}
+
+.stagger-children > * {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+}
+
+.stagger-children.visible > *:nth-child(1) {
+  transition-delay: 0ms;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.stagger-children.visible > *:nth-child(2) {
+  transition-delay: 100ms;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.stagger-children.visible > *:nth-child(3) {
+  transition-delay: 200ms;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.stagger-children.visible > *:nth-child(4) {
+  transition-delay: 300ms;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.stagger-children.visible > *:nth-child(5) {
+  transition-delay: 400ms;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.stagger-children.visible > *:nth-child(6) {
+  transition-delay: 500ms;
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .hljs {
