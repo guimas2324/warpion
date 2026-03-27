@@ -1,6 +1,7 @@
 import { generateText } from "ai";
 import { getProviderModel } from "@/lib/ai/providers";
 import { recordUsageAndDebit } from "@/lib/ai/token-ledger";
+import { extractTokenUsage } from "@/lib/ai/usage";
 
 export type GroupWorkAgent = {
   label: string;
@@ -36,14 +37,15 @@ export async function runGroupWorkPhase(params: {
     abortSignal: abort.signal,
   });
   clearTimeout(timeout);
+  const tokens = extractTokenUsage(result.usage);
 
   await recordUsageAndDebit({
     userId,
     conversationId,
     modelId: phase.agent.modelId,
     provider: phase.agent.provider,
-    inputTokens: result.usage?.promptTokens ?? 0,
-    outputTokens: result.usage?.completionTokens ?? 0,
+    inputTokens: tokens.inputTokens,
+    outputTokens: tokens.outputTokens,
     toolType: "group_work",
     phase: phase.name,
   });

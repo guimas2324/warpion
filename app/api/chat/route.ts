@@ -6,17 +6,7 @@ import { getProviderModel } from "@/lib/ai/providers";
 import { resolveModelId } from "@/lib/ai/model-router";
 import type { ChatRequestPayload } from "@/types/chat";
 import { recordUsageAndDebit } from "@/lib/ai/token-ledger";
-import { decryptSecret } from "@/lib/security/secrets";
-
-function normalizeProvider(provider: string) {
-  const p = provider.toLowerCase();
-  if (p.includes("openai")) return "openai";
-  if (p.includes("anthropic")) return "anthropic";
-  if (p.includes("google") || p.includes("gemini")) return "google";
-  if (p.includes("deepseek")) return "deepseek";
-  if (p.includes("xai") || p.includes("grok")) return "xai";
-  return p;
-}
+import { extractTokenUsage } from "@/lib/ai/usage";
 
 export async function POST(request: Request) {
   const supabase = await createSupabaseServerClient();
@@ -100,16 +90,7 @@ export async function POST(request: Request) {
       attachments: body.attachments ?? [],
     });
 
-    const { data: userKey } = await supabase
-      .from("user_api_keys")
-      .select("encrypted_key")
-      .eq("user_id", user.id)
-      .eq("provider", normalizeProvider(modelRow.provider))
-      .eq("is_active", true)
-      .maybeSingle();
-    const decryptedKey = userKey?.encrypted_key ? decryptSecret(userKey.encrypted_key) : undefined;
-
-    const model = getProviderModel(modelRow.provider, selectedModel, decryptedKey);
+    const model = getProviderModel(modelRow.provider, selectedModel);
     const messages = [
       ...(body.history ?? []).map((m) => ({
         role: m.role as "user" | "assistant" | "system",
@@ -128,14 +109,15 @@ export async function POST(request: Request) {
       abortSignal: abort.signal,
       onFinish: async ({ text, usage }) => {
         clearTimeout(timeout);
+        const tokens = extractTokenUsage(usage);
         await supabase.from("messages").insert({
           conversation_id: conversationId,
           role: "assistant",
           content: text,
           model: selectedModel,
           provider: modelRow.provider,
-          tokens_input: usage.promptTokens ?? 0,
-          tokens_output: usage.completionTokens ?? 0,
+          tokens_input: tokens.inputTokens,
+          tokens_output: tokens.outputTokens,
           phase: body.mode,
           metadata: { routed_task_type: route.taskType, mode: route.mode },
         });
@@ -145,15 +127,15 @@ export async function POST(request: Request) {
           conversationId: conversationId ?? "",
           modelId: selectedModel,
           provider: modelRow.provider,
-          inputTokens: usage.promptTokens ?? 0,
-          outputTokens: usage.completionTokens ?? 0,
+          inputTokens: tokens.inputTokens,
+          outputTokens: tokens.outputTokens,
           toolType: "chat",
           phase: route.taskType,
         });
       },
     });
 
-    return result.toDataStreamResponse({
+    return result.toUIMessageStreamResponse({
       headers: {
         "x-conversation-id": conversationId ?? "",
         "x-selected-model": selectedModel,

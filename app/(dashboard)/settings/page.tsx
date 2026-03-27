@@ -14,18 +14,13 @@ type PlanData = {
   tokens_remaining: number;
   tokens_used_total: number;
 };
-type ApiKeyRow = { id: string; provider: string; key_hint: string; is_active: boolean };
-
-const PROVIDERS = ["openai", "anthropic", "google", "deepseek", "xai"] as const;
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [plan, setPlan] = useState<PlanData | null>(null);
-  const [keys, setKeys] = useState<ApiKeyRow[]>([]);
   const [usage, setUsage] = useState<Array<{ date: string; tokens: number }>>([]);
   const [draftName, setDraftName] = useState("");
   const [draftAvatar, setDraftAvatar] = useState("");
-  const [keyInputs, setKeyInputs] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
 
   const maxTokens = useMemo(() => Number(plan?.plan.tokens_monthly ?? 1), [plan]);
@@ -33,10 +28,9 @@ export default function SettingsPage() {
   const progress = useMemo(() => Math.min(100, Math.round((used / maxTokens) * 100)), [used, maxTokens]);
 
   async function loadAll() {
-    const [profileRes, planRes, keysRes, usageRes] = await Promise.all([
+    const [profileRes, planRes, usageRes] = await Promise.all([
       fetch("/api/settings/profile"),
       fetch("/api/settings/plan"),
-      fetch("/api/settings/keys"),
       fetch("/api/settings/usage"),
     ]);
 
@@ -49,10 +43,6 @@ export default function SettingsPage() {
     if (planRes.ok) {
       const json = (await planRes.json()) as { data: PlanData };
       setPlan(json.data);
-    }
-    if (keysRes.ok) {
-      const json = (await keysRes.json()) as { data: ApiKeyRow[] };
-      setKeys(json.data ?? []);
     }
     if (usageRes.ok) {
       const json = (await usageRes.json()) as { data: { daySeries: Array<{ date: string; tokens: number }> } };
@@ -74,35 +64,11 @@ export default function SettingsPage() {
     await loadAll();
   }
 
-  async function saveKey(provider: string) {
-    const key = keyInputs[provider]?.trim();
-    if (!key) return;
-    const res = await fetch("/api/settings/keys", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ provider, api_key: key }),
-    });
-    setMessage(res.ok ? `Key de ${provider} salva.` : `Falha ao salvar key de ${provider}.`);
-    setKeyInputs((prev) => ({ ...prev, [provider]: "" }));
-    await loadAll();
-  }
-
-  async function testKey(provider: string) {
-    const key = keyInputs[provider]?.trim();
-    if (!key) return;
-    const res = await fetch("/api/settings/keys/test", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ provider, api_key: key }),
-    });
-    setMessage(res.ok ? `Key de ${provider} parece valida.` : `Key de ${provider} invalida.`);
-  }
-
   return (
     <div className="space-y-6 p-6">
       <div>
         <div className="text-lg font-semibold tracking-tight">Settings</div>
-        <div className="text-sm text-zinc-500">Perfil, plano, API keys e uso de tokens.</div>
+        <div className="text-sm text-zinc-500">Perfil, plano e uso de tokens.</div>
       </div>
 
       {message ? <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-800 dark:bg-zinc-900">{message}</div> : null}
@@ -126,31 +92,6 @@ export default function SettingsPage() {
         </div>
         <div className="mt-2 text-xs text-zinc-500">{progress}% do plano consumido</div>
         <button className="mt-3 h-9 rounded-xl border border-zinc-200 px-3 text-sm dark:border-zinc-800">Upgrade</button>
-      </section>
-
-      <section className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-        <div className="mb-3 text-sm font-semibold">API Keys</div>
-        <div className="space-y-3">
-          {PROVIDERS.map((provider) => {
-            const existing = keys.find((k) => k.provider === provider);
-            return (
-              <div key={provider} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">{provider}</div>
-                <div className="mb-2 text-xs text-zinc-500">Atual: {existing?.key_hint ?? "não configurada"}</div>
-                <div className="flex gap-2">
-                  <input
-                    value={keyInputs[provider] ?? ""}
-                    onChange={(e) => setKeyInputs((prev) => ({ ...prev, [provider]: e.target.value }))}
-                    placeholder="Cole a API key"
-                    className="h-10 flex-1 rounded-xl border border-zinc-200 px-3 text-sm dark:border-zinc-800 dark:bg-black"
-                  />
-                  <button onClick={() => testKey(provider)} className="h-10 rounded-xl border border-zinc-200 px-3 text-sm dark:border-zinc-800">Testar</button>
-                  <button onClick={() => saveKey(provider)} className="h-10 rounded-xl bg-zinc-900 px-3 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">Salvar</button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
       </section>
 
       <section className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">

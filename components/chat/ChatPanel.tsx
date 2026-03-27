@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useChat } from "@ai-sdk/react";
-import type { UIMessage } from "ai";
+import { DefaultChatTransport, type UIMessage } from "ai";
 import { ModeToggle } from "@/components/chat/ModeToggle";
 import { ModelSelector } from "@/components/chat/ModelSelector";
 import { InputBar } from "@/components/chat/InputBar";
@@ -27,6 +27,13 @@ type ModelDTO = {
 type ProfileDTO = { tokens_remaining: number };
 type ConversationMessageDTO = { id: string; role: "user" | "assistant" | "system"; content: string; attachments?: ChatAttachment[] };
 
+function getMessageText(message: UIMessage) {
+  return (message.parts ?? [])
+    .filter((part) => part.type === "text")
+    .map((part) => ("text" in part ? part.text : ""))
+    .join("");
+}
+
 export function ChatPanel() {
   const mode = useChatStore((s) => s.mode);
   const modelId = useChatStore((s) => s.modelId);
@@ -49,17 +56,19 @@ export function ChatPanel() {
     [mode, modelId, selectedConversationId],
   );
 
-  const { messages, append, setMessages, status } = useChat({
-    api: "/api/chat",
-    body,
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/chat",
+        body,
+      }),
+    [body],
+  );
+
+  const { messages, sendMessage, setMessages, status } = useChat({
+    transport,
     onError(err) {
       setError(err.message);
-    },
-    onResponse(response) {
-      const conv = response.headers.get("x-conversation-id");
-      const selected = response.headers.get("x-selected-model");
-      if (conv && !selectedConversationId) setSelectedConversationId(conv);
-      if (selected) setLastSelectedModel(selected);
     },
   });
 
@@ -99,7 +108,7 @@ export function ChatPanel() {
         (json.data ?? []).map((m) => ({
           id: m.id,
           role: m.role,
-          content: m.content,
+          parts: [{ type: "text" as const, text: m.content }],
         })),
       );
     }
@@ -125,10 +134,10 @@ export function ChatPanel() {
           <MessageBubble
             key={m.id}
             role={m.role as "user" | "assistant"}
-            content={m.content}
+            content={getMessageText(m)}
             onRegenerate={
               m.role === "assistant" && lastPrompt
-                ? () => append({ role: "user", content: lastPrompt })
+                ? () => sendMessage({ text: lastPrompt }, { body })
                 : undefined
             }
           />
@@ -143,7 +152,7 @@ export function ChatPanel() {
         onSend={(value, attachments) => {
           setLastPrompt(value);
           setError("");
-          append({ role: "user", content: value }, { body: { ...body, attachments } });
+          sendMessage({ text: value }, { body: { ...body, attachments } });
         }}
       />
       {tokensRemaining <= 0 ? <div className="mt-2 text-xs text-amber-600">Sem tokens restantes. Faça upgrade no plano.</div> : null}
