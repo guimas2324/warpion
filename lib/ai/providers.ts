@@ -35,7 +35,7 @@ export function getProviderModel(provider: string, catalogModelId: string) {
   if (normalized.includes("deepseek")) {
     return createOpenAI({
       apiKey: process.env.DEEPSEEK_API_KEY!,
-      baseURL: "https://api.deepseek.com/v1",
+      baseURL: "https://api.deepseek.com",
     })(apiModelId);
   }
   if (normalized.includes("xai") || normalized.includes("grok")) {
