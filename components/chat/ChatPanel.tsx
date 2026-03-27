@@ -147,23 +147,34 @@ export function ChatPanel() {
         setMessages([]);
         return;
       }
-      const res = await fetch(`/api/conversations/${selectedConversationId}/messages`);
-      if (!res.ok) return;
-      const json = (await res.json()) as { data: ConversationMessageDTO[] };
-      setMessages(
-        (json.data ?? []).map((m) => ({
-          id: m.id,
-          role: m.role,
-          parts: [{ type: "text" as const, text: m.content }],
-          metadata: {
-            provider: m.provider ?? undefined,
-            model: m.model ?? undefined,
-            tokens_input: Number(m.tokens_input ?? 0),
-            tokens_output: Number(m.tokens_output ?? 0),
-            attachments: m.attachments ?? [],
-          },
-        })),
-      );
+      try {
+        const res = await fetch(`/api/conversations/${selectedConversationId}/messages`);
+        if (!res.ok) {
+          setMessages([]);
+          setError("Falha ao carregar mensagens da conversa.");
+          return;
+        }
+        const json = (await res.json()) as { data: ConversationMessageDTO[] };
+        setError("");
+        setMessages(
+          (json.data ?? []).map((m) => ({
+            id: m.id,
+            role: m.role,
+            parts: [{ type: "text" as const, text: m.content }],
+            metadata: {
+              ...(m.metadata ?? {}),
+              provider: m.provider ?? undefined,
+              model: m.model ?? undefined,
+              tokens_input: Number(m.tokens_input ?? 0),
+              tokens_output: Number(m.tokens_output ?? 0),
+              attachments: m.attachments ?? [],
+            },
+          })),
+        );
+      } catch (error) {
+        setMessages([]);
+        setError(error instanceof Error ? error.message : "Falha ao carregar mensagens da conversa.");
+      }
     }
     void loadConversationMessages();
   }, [selectedConversationId, setMessages]);
@@ -339,6 +350,7 @@ export function ChatPanel() {
           const generatedImageModel = typeof meta.generated_image_model === "string" ? meta.generated_image_model : undefined;
           const generatedImagePrompt = typeof meta.generated_image_prompt === "string" ? meta.generated_image_prompt : undefined;
           const generatedAudioUrl = typeof meta.generated_audio_url === "string" ? meta.generated_audio_url : undefined;
+          const visionWarning = typeof meta.vision_warning === "string" ? meta.vision_warning : undefined;
           if (m.role === "assistant" && generatedImageUrl && generatedImageModel) {
             return (
               <div key={m.id} className="flex justify-start">
@@ -351,48 +363,54 @@ export function ChatPanel() {
             );
           }
           return (
-            <MessageBubble
-              key={m.id}
-              role={m.role as "user" | "assistant"}
-              content={getMessageText(m)}
-              provider={typeof meta.provider === "string" ? meta.provider : undefined}
-              model={typeof meta.model === "string" ? meta.model : undefined}
-              tokens={Number(meta.tokens_input ?? 0) + Number(meta.tokens_output ?? 0)}
-              tokensInput={Number(meta.tokens_input ?? 0)}
-              tokensOutput={Number(meta.tokens_output ?? 0)}
-              audioUrl={audioByMessageId[m.id] ?? generatedAudioUrl}
-              onSpeak={
-                m.role === "assistant"
-                  ? () => {
-                      const existing = audioByMessageId[m.id];
-                      if (existing) return;
-                      void (async () => {
-                        try {
-                          const response = await fetch("/api/media/tts", {
-                            method: "POST",
-                            headers: { "content-type": "application/json" },
-                            body: JSON.stringify({ text: getMessageText(m), model: "openai-tts", voice: "nova" }),
-                          });
-                          const payload = (await response.json()) as { data?: { url?: string }; error?: string };
-                          if (!response.ok || !payload.data?.url) {
-                            setError(payload.error ?? "Falha ao gerar audio.");
-                            return;
+            <div key={m.id} className="space-y-1">
+              {m.role === "assistant" && visionWarning ? (
+                <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-xs text-amber-200">
+                  {visionWarning}
+                </div>
+              ) : null}
+              <MessageBubble
+                role={m.role as "user" | "assistant"}
+                content={getMessageText(m)}
+                provider={typeof meta.provider === "string" ? meta.provider : undefined}
+                model={typeof meta.model === "string" ? meta.model : undefined}
+                tokens={Number(meta.tokens_input ?? 0) + Number(meta.tokens_output ?? 0)}
+                tokensInput={Number(meta.tokens_input ?? 0)}
+                tokensOutput={Number(meta.tokens_output ?? 0)}
+                audioUrl={audioByMessageId[m.id] ?? generatedAudioUrl}
+                onSpeak={
+                  m.role === "assistant"
+                    ? () => {
+                        const existing = audioByMessageId[m.id];
+                        if (existing) return;
+                        void (async () => {
+                          try {
+                            const response = await fetch("/api/media/tts", {
+                              method: "POST",
+                              headers: { "content-type": "application/json" },
+                              body: JSON.stringify({ text: getMessageText(m), model: "openai-tts", voice: "nova" }),
+                            });
+                            const payload = (await response.json()) as { data?: { url?: string }; error?: string };
+                            if (!response.ok || !payload.data?.url) {
+                              setError(payload.error ?? "Falha ao gerar audio.");
+                              return;
+                            }
+                            setAudioByMessageId((prev) => ({ ...prev, [m.id]: payload.data?.url ?? "" }));
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : "Falha ao gerar audio.");
                           }
-                          setAudioByMessageId((prev) => ({ ...prev, [m.id]: payload.data?.url ?? "" }));
-                        } catch (err) {
-                          setError(err instanceof Error ? err.message : "Falha ao gerar audio.");
-                        }
-                      })();
-                    }
-                  : undefined
-              }
-              attachments={Array.isArray(meta.attachments) ? (meta.attachments as ChatAttachment[]) : undefined}
-              onRegenerate={
-                m.role === "assistant" && lastPrompt
-                  ? () => sendMessage({ text: lastPrompt }, { body })
-                  : undefined
-              }
-            />
+                        })();
+                      }
+                    : undefined
+                }
+                attachments={Array.isArray(meta.attachments) ? (meta.attachments as ChatAttachment[]) : undefined}
+                onRegenerate={
+                  m.role === "assistant" && lastPrompt
+                    ? () => sendMessage({ text: lastPrompt }, { body })
+                    : undefined
+                }
+              />
+            </div>
           );
         })}
         {(status === "submitted" || status === "streaming") ? (
@@ -445,10 +463,10 @@ export function ChatPanel() {
         <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-red-500/60 bg-red-500/10 px-3 py-2 text-sm text-red-200">
           <span>Seus tokens acabaram. Faça upgrade do plano ou compre tokens extras.</span>
           <div className="flex gap-2">
-            <button onClick={() => (window.location.href = "/settings#plans")} className="rounded-lg border border-red-400/60 px-2 py-1 text-xs hover:bg-red-500/10">
+            <button onClick={() => (window.location.href = "/settings?tab=plan")} className="rounded-lg border border-red-400/60 px-2 py-1 text-xs hover:bg-red-500/10">
               Fazer Upgrade
             </button>
-            <button onClick={() => (window.location.href = "/settings#tokens")} className="rounded-lg border border-red-400/60 px-2 py-1 text-xs hover:bg-red-500/10">
+            <button onClick={() => (window.location.href = "/settings?tab=plan#tokens")} className="rounded-lg border border-red-400/60 px-2 py-1 text-xs hover:bg-red-500/10">
               Comprar Tokens
             </button>
           </div>
@@ -460,7 +478,7 @@ export function ChatPanel() {
           <span>
             Restam apenas {tokensRemaining.toLocaleString("pt-BR")} tokens ({lowPct}%). Considere fazer upgrade.
           </span>
-          <button onClick={() => (window.location.href = "/settings#plans")} className="rounded-lg border border-amber-400/60 px-2 py-1 text-xs hover:bg-amber-500/10">
+          <button onClick={() => (window.location.href = "/settings?tab=plan")} className="rounded-lg border border-amber-400/60 px-2 py-1 text-xs hover:bg-amber-500/10">
             Ver Planos
           </button>
         </div>

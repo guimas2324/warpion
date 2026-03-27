@@ -4,6 +4,9 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { debitTokensWithFallback } from "@/lib/ai/debit-tokens";
+import { ensureSufficientTokens } from "@/lib/ai/token-balance";
+import { resolveCostCentsForModel } from "@/lib/ai/cost-cents";
 
 type TtsBody = {
   text?: string;
@@ -29,6 +32,15 @@ export async function POST(request: Request) {
     const admin = createSupabaseAdminClient();
     let audioBuffer: Buffer;
     let contentType = "audio/mpeg";
+    const roughTokens = Math.max(1, Math.ceil(text.length / 4));
+    const precheck = await ensureSufficientTokens({
+      supabase,
+      userId: user.id,
+      requiredTokens: roughTokens,
+    });
+    if (!precheck.ok) {
+      return NextResponse.json({ data: null, error: "Insufficient tokens", meta: {} }, { status: 402 });
+    }
 
     if (selectedModel === "openai-tts") {
       const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -87,12 +99,17 @@ export async function POST(request: Request) {
 
     const { data: publicData } = admin.storage.from("chat-attachments").getPublicUrl(path);
     const modelId = selectedModel === "openai-tts" ? "openai-tts" : "elevenlabs-tts";
-    const roughTokens = Math.max(1, Math.ceil(text.length / 4));
-    await admin.rpc("debit_tokens", {
-      p_user_id: user.id,
-      p_model_id: modelId,
-      p_tool_type: "chat",
-      p_raw_tokens: roughTokens,
+    await debitTokensWithFallback(admin, {
+      userId: user.id,
+      modelId,
+      toolType: "chat",
+      rawTokens: roughTokens,
+    });
+    const costCents = await resolveCostCentsForModel({
+      admin,
+      modelId,
+      inputTokens: roughTokens,
+      outputTokens: 0,
     });
 
     await admin.from("token_usage_log").insert({
@@ -102,7 +119,7 @@ export async function POST(request: Request) {
       provider: selectedModel === "openai-tts" ? "openai" : "elevenlabs",
       tokens_input: roughTokens,
       tokens_output: 0,
-      cost_cents: 0,
+      cost_cents: costCents,
       tool_type: "chat",
       phase: "general",
       metadata: {

@@ -34,6 +34,7 @@ export async function recordUsageAndDebit(params: UsageRecordParams) {
 
   // Concurrency-safe debit with compare-and-swap (CAS) retries.
   let remainingTokens = 0;
+  let debitApplied = false;
   for (let attempt = 0; attempt < 5; attempt++) {
     const { data: profileRow, error: profileError } = await admin
       .from("profiles")
@@ -65,6 +66,7 @@ export async function recordUsageAndDebit(params: UsageRecordParams) {
     if (updateError) throw updateError;
     if (updated) {
       remainingTokens = Number(updated.tokens_remaining ?? nextRemaining);
+      debitApplied = true;
       break;
     }
 
@@ -72,10 +74,7 @@ export async function recordUsageAndDebit(params: UsageRecordParams) {
     await new Promise((r) => setTimeout(r, 30 * (attempt + 1)));
   }
 
-  if (remainingTokens === 0 && totalTokens > 0) {
-    // Could be legitimate depletion, but also could mean repeated CAS failures.
-    // If the user had tokens, we would have succeeded; treat as transient failure.
-    // eslint-disable-next-line no-throw-literal
+  if (!debitApplied && totalTokens > 0) {
     throw new Error("Token debit failed due to concurrent updates");
   }
 

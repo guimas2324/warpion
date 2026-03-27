@@ -6,6 +6,9 @@ import type { ChatRequestPayload, UiChatMessage } from "@/types/chat";
 import { processWithIntelligenceEngine } from "@/lib/ai/intelligence-engine";
 import { generateText } from "ai";
 import { getProviderModel } from "@/lib/ai/providers";
+import { extractTokenUsage } from "@/lib/ai/usage";
+import { debitTokensWithFallback } from "@/lib/ai/debit-tokens";
+import { resolveCostCentsForModel } from "@/lib/ai/cost-cents";
 
 function getClientIp(request: Request) {
   const header = request.headers.get("x-forwarded-for");
@@ -79,9 +82,12 @@ function toChatStreamResponse(
 
 async function generateConversationTitle(params: {
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
+  admin: ReturnType<typeof createSupabaseAdminClient> | null;
+  userId: string;
+  conversationId: string;
   message: string;
 }) {
-  const { supabase, message } = params;
+  const { supabase, admin, userId, conversationId, message } = params;
   const cheapModelIds = ["claude-haiku-4-5", "gemini-3-flash", "deepseek-v3.2"];
   const { data: models } = await supabase
     .from("model_catalog")
@@ -106,6 +112,41 @@ async function generateConversationTitle(params: {
       ].join("\n"),
       maxOutputTokens: 24,
     });
+    if (admin) {
+      const usage = extractTokenUsage(result.usage);
+      const rawTokens = Math.max(0, usage.inputTokens + usage.outputTokens);
+      if (rawTokens > 0) {
+        const debit = await debitTokensWithFallback(admin, {
+          userId,
+          modelId: picked.id,
+          toolType: "chat",
+          rawTokens,
+        });
+        const costCents = await resolveCostCentsForModel({
+          admin,
+          modelId: picked.id,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+        });
+        await admin.from("token_usage_log").insert({
+          user_id: userId,
+          conversation_id: conversationId,
+          model: picked.id,
+          provider: picked.provider,
+          tokens_input: usage.inputTokens,
+          tokens_output: usage.outputTokens,
+          cost_cents: costCents,
+          tool_type: "chat",
+          phase: "auto_title",
+          metadata: {
+            debit_result: {
+              ...debit.data,
+              signature: debit.signature,
+            },
+          },
+        });
+      }
+    }
     const title = result.text.trim().replace(/^["']|["']$/g, "");
     return title.slice(0, 80) || message.split("\n")[0].slice(0, 60);
   } catch {
@@ -252,6 +293,7 @@ export async function POST(request: Request) {
             mode: body.mode,
             model: params.selectedModelId,
             provider: params.provider,
+            vision_warning: params.visionWarning ?? null,
           },
         });
 
@@ -264,7 +306,13 @@ export async function POST(request: Request) {
           .eq("id", conversationId);
 
         if (isFirstMessage) {
-          const title = await generateConversationTitle({ supabase, message });
+          const title = await generateConversationTitle({
+            supabase,
+            admin,
+            userId: user.id,
+            conversationId: conversationId ?? "",
+            message,
+          });
           await supabase
             .from("conversations")
             .update({ title })

@@ -4,6 +4,9 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { debitTokensWithFallback } from "@/lib/ai/debit-tokens";
+import { ensureSufficientTokens } from "@/lib/ai/token-balance";
+import { resolveCostCentsForModel } from "@/lib/ai/cost-cents";
 
 type ImageRequestBody = {
   prompt?: string;
@@ -31,6 +34,15 @@ export async function POST(request: Request) {
     }
     const selectedModel = body.model ?? "gpt-image";
     const admin = createSupabaseAdminClient();
+    const modelId = selectedModel === "gpt-image" ? "gpt-image" : "gemini-imagen";
+    const precheck = await ensureSufficientTokens({
+      supabase,
+      userId: user.id,
+      requiredTokens: 1000,
+    });
+    if (!precheck.ok) {
+      return NextResponse.json({ data: null, error: "Insufficient tokens", meta: {} }, { status: 402 });
+    }
 
     let base64: string | undefined;
     if (selectedModel === "gpt-image") {
@@ -75,12 +87,17 @@ export async function POST(request: Request) {
 
     const { data: publicData } = admin.storage.from("chat-attachments").getPublicUrl(path);
 
-    const modelId = selectedModel === "gpt-image" ? "gpt-image" : "gemini-imagen";
-    await admin.rpc("debit_tokens", {
-      p_user_id: user.id,
-      p_model_id: modelId,
-      p_tool_type: "chat",
-      p_raw_tokens: 1000,
+    await debitTokensWithFallback(admin, {
+      userId: user.id,
+      modelId,
+      toolType: "chat",
+      rawTokens: 1000,
+    });
+    const costCents = await resolveCostCentsForModel({
+      admin,
+      modelId,
+      inputTokens: 500,
+      outputTokens: 500,
     });
 
     await admin.from("token_usage_log").insert({
@@ -90,7 +107,7 @@ export async function POST(request: Request) {
       provider: selectedModel === "gpt-image" ? "openai" : "google",
       tokens_input: 500,
       tokens_output: 500,
-      cost_cents: 0,
+      cost_cents: costCents,
       tool_type: "chat",
       phase: "asset_analysis",
       metadata: {

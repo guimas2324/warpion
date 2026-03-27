@@ -9,6 +9,8 @@ import { buildArchitectedPrompt } from "@/lib/ai/intelligence-engine/prompt-arch
 import { decodeIntent } from "@/lib/ai/intelligence-engine/intent-decoder";
 import { runQualityGate } from "@/lib/ai/intelligence-engine/quality-gate";
 import { recordUsageAndDebit } from "@/lib/ai/token-ledger";
+import { debitTokensWithFallback } from "@/lib/ai/debit-tokens";
+import { resolveCostCentsForModel } from "@/lib/ai/cost-cents";
 
 type ToolType = "chat" | "group_work";
 
@@ -31,6 +33,7 @@ type ProcessParams = {
     taskType: TaskType;
     inputTokens: number;
     outputTokens: number;
+    visionWarning?: string;
   }) => Promise<void>;
 };
 
@@ -40,6 +43,7 @@ type EngineResult = {
   provider: string;
   taskType: TaskType;
   intentReasoning: string;
+  warnings: string[];
 };
 
 async function resolveMappedModelId(supabase: SupabaseClient, taskType: TaskType) {
@@ -92,6 +96,18 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
     persistAssistantMessage,
   } = params;
 
+  let admin: ReturnType<typeof createSupabaseAdminClient> | null = null;
+  try {
+    admin = createSupabaseAdminClient();
+  } catch (adminError) {
+    console.error("Admin client unavailable in intelligence engine:", adminError);
+    admin = null;
+  }
+  if (!admin) {
+    throw new Error("Billing service unavailable. Tente novamente em instantes.");
+  }
+  const billingAdmin = admin;
+
   const intent = await decodeIntent({
     supabase,
     message,
@@ -133,13 +149,68 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
   });
 
   const model = getProviderModel(modelRow.provider, selectedModelId);
-  let admin: ReturnType<typeof createSupabaseAdminClient> | null = null;
-  try {
-    admin = createSupabaseAdminClient();
-  } catch (adminError) {
-    console.error("Admin client unavailable in intelligence engine, proceeding without private RPCs:", adminError);
-    admin = null;
+  const warnings: string[] = [];
+
+  async function recordPhaseUsage(params: {
+    phase: string;
+    modelId: string;
+    provider: string;
+    inputTokens: number;
+    outputTokens: number;
+    metadata?: Record<string, unknown>;
+  }) {
+    const rawTokens = Math.max(0, params.inputTokens + params.outputTokens);
+    if (rawTokens <= 0) return null;
+
+    const debit = await debitTokensWithFallback(billingAdmin, {
+      userId,
+      modelId: params.modelId,
+      toolType,
+      rawTokens,
+    });
+    const costCents = await resolveCostCentsForModel({
+      admin: billingAdmin,
+      modelId: params.modelId,
+      inputTokens: params.inputTokens,
+      outputTokens: params.outputTokens,
+    });
+    const { error: insertError } = await billingAdmin.from("token_usage_log").insert({
+      user_id: userId,
+      conversation_id: conversationId ?? null,
+      model: params.modelId,
+      provider: params.provider,
+      tokens_input: params.inputTokens,
+      tokens_output: params.outputTokens,
+      cost_cents: costCents,
+      tool_type: toolType,
+      phase: params.phase,
+      metadata: {
+        debit_result: {
+          ...debit.data,
+          signature: debit.signature,
+        },
+        ...(params.metadata ?? {}),
+      },
+    });
+    if (insertError) {
+      console.error(`token_usage_log insert failed for phase ${params.phase}:`, insertError);
+    }
+    return { debit, costCents };
   }
+
+  if (intent.usage) {
+    await recordPhaseUsage({
+      phase: "intent_decoder",
+      modelId: intent.usage.modelId,
+      provider: intent.usage.provider,
+      inputTokens: intent.usage.inputTokens,
+      outputTokens: intent.usage.outputTokens,
+      metadata: {
+        intent_reasoning: intent.reasoning,
+      },
+    });
+  }
+
   const modelMessages: ModelMessage[] = [
     ...history.map((m) => ({
       role: m.role as "user" | "assistant" | "system",
@@ -160,7 +231,9 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
       ],
     };
   } else if (imageAttachments.length > 0 && !modelRow.supports_vision) {
-    console.warn(`Model ${selectedModelId} does not support vision. Image attachments ignored.`);
+    const warning = `Model ${selectedModelId} does not support vision. Image attachments ignored.`;
+    console.warn(warning);
+    warnings.push(warning);
   }
 
   const abort = new AbortController();
@@ -176,35 +249,34 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
       const tokens = extractTokenUsage(usage);
       const rawTokens = Math.max(0, tokens.inputTokens + tokens.outputTokens);
 
-      const debitPayload = {
-        user_id: userId,
-        model_id: selectedModelId,
-        tool_type: toolType,
-        raw_tokens: rawTokens,
-      };
       let debitResult: unknown = null;
-      if (admin) {
-        const { data: debitData, error: debitError } = await admin.rpc("debit_tokens", debitPayload);
-        if (debitError) {
-          // Fallback to legacy ledger debit if RPC is unavailable/misconfigured.
-          console.error("debit_tokens RPC failed, falling back to ledger:", debitError);
-          await recordUsageAndDebit({
-            userId,
-            conversationId: conversationId ?? "",
-            modelId: selectedModelId,
-            provider: modelRow.provider,
-            inputTokens: tokens.inputTokens,
-            outputTokens: tokens.outputTokens,
-            toolType,
-            phase: intent.task_type,
-          });
-          debitResult = { success: true, fallback: "recordUsageAndDebit" };
-        } else {
-          debitResult = debitData;
-        }
-      } else {
-        console.error("Skipping debit_tokens because admin client is unavailable.");
-        debitResult = { success: false, skipped: "admin_unavailable" };
+      let usedLedgerFallback = false;
+      try {
+        const debit = await debitTokensWithFallback(billingAdmin, {
+          userId,
+          modelId: selectedModelId,
+          toolType,
+          rawTokens,
+        });
+        debitResult = {
+          ...debit.data,
+          signature: debit.signature,
+        };
+      } catch (debitError) {
+        // Fallback to legacy ledger debit if RPC is unavailable/misconfigured.
+        console.error("debit_tokens RPC failed, falling back to ledger:", debitError);
+        await recordUsageAndDebit({
+          userId,
+          conversationId: conversationId ?? "",
+          modelId: selectedModelId,
+          provider: modelRow.provider,
+          inputTokens: tokens.inputTokens,
+          outputTokens: tokens.outputTokens,
+          toolType,
+          phase: intent.task_type,
+        });
+        usedLedgerFallback = true;
+        debitResult = { success: true, fallback: "recordUsageAndDebit" };
       }
 
       if (persistAssistantMessage) {
@@ -215,24 +287,32 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
           taskType: intent.task_type,
           inputTokens: tokens.inputTokens,
           outputTokens: tokens.outputTokens,
+          visionWarning: warnings[0],
         });
       }
 
-      if (admin) {
-        const { error: usageInsertError } = await admin.from("token_usage_log").insert({
+      if (!usedLedgerFallback && rawTokens > 0) {
+        const costCents = await resolveCostCentsForModel({
+          admin: billingAdmin,
+          modelId: selectedModelId,
+          inputTokens: tokens.inputTokens,
+          outputTokens: tokens.outputTokens,
+        });
+        const { error: usageInsertError } = await billingAdmin.from("token_usage_log").insert({
           user_id: userId,
           conversation_id: conversationId ?? null,
           model: selectedModelId,
           provider: modelRow.provider,
           tokens_input: tokens.inputTokens,
           tokens_output: tokens.outputTokens,
-          cost_cents: 0,
+          cost_cents: costCents,
           tool_type: toolType,
           phase: intent.task_type,
           metadata: {
             debit_result: debitResult,
             selected_skills: selectedSkills,
             intent_reasoning: intent.reasoning,
+            warnings,
           },
         });
         if (usageInsertError) {
@@ -246,6 +326,19 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
         answer: text,
         taskType: intent.task_type,
       });
+      if (quality.usage) {
+        await recordPhaseUsage({
+          phase: "quality_gate",
+          modelId: quality.usage.modelId,
+          provider: quality.usage.provider,
+          inputTokens: quality.usage.inputTokens,
+          outputTokens: quality.usage.outputTokens,
+          metadata: {
+            passed: quality.passed,
+            completeness: quality.completeness,
+          },
+        });
+      }
 
       if (!quality.passed && quality.completeness < 70) {
         const improved = await generateText({
@@ -259,45 +352,52 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
             text,
           ].join("\n"),
         });
+        const retryUsage = extractTokenUsage(improved.usage);
+        await recordPhaseUsage({
+          phase: "quality_gate_retry",
+          modelId: selectedModelId,
+          provider: modelRow.provider,
+          inputTokens: retryUsage.inputTokens,
+          outputTokens: retryUsage.outputTokens,
+          metadata: {
+            trigger: "quality_gate",
+          },
+        });
 
-        if (admin) {
-          const { error: auditRetryError } = await admin.schema("private").rpc("log_audit", {
-            user_id: userId,
-            action: "quality_gate_retry",
-            resource_type: "chat_message",
-            resource_id: conversationId ?? null,
-            ip: requestIp ?? null,
-            user_agent: userAgent ?? null,
-            metadata: {
-              quality,
-              improved_preview: improved.text.slice(0, 300),
-            },
-          });
-          if (auditRetryError) {
-            console.error("quality_gate_retry audit failed:", auditRetryError);
-          }
-        }
-      }
-
-      if (admin) {
-        const { error: auditMainError } = await admin.schema("private").rpc("log_audit", {
+        const { error: auditRetryError } = await billingAdmin.schema("private").rpc("log_audit", {
           user_id: userId,
-          action: "intelligence_engine_processed",
-          resource_type: "chat",
+          action: "quality_gate_retry",
+          resource_type: "chat_message",
           resource_id: conversationId ?? null,
           ip: requestIp ?? null,
           user_agent: userAgent ?? null,
           metadata: {
-            task_type: intent.task_type,
-            model_id: selectedModelId,
-            model_provider: modelRow.provider,
-            selected_skills: selectedSkills,
             quality,
+            improved_preview: improved.text.slice(0, 300),
           },
         });
-        if (auditMainError) {
-          console.error("intelligence_engine_processed audit failed:", auditMainError);
+        if (auditRetryError) {
+          console.error("quality_gate_retry audit failed:", auditRetryError);
         }
+      }
+
+      const { error: auditMainError } = await billingAdmin.schema("private").rpc("log_audit", {
+        user_id: userId,
+        action: "intelligence_engine_processed",
+        resource_type: "chat",
+        resource_id: conversationId ?? null,
+        ip: requestIp ?? null,
+        user_agent: userAgent ?? null,
+        metadata: {
+          task_type: intent.task_type,
+          model_id: selectedModelId,
+          model_provider: modelRow.provider,
+          selected_skills: selectedSkills,
+          quality,
+        },
+      });
+      if (auditMainError) {
+        console.error("intelligence_engine_processed audit failed:", auditMainError);
       }
     },
   });
@@ -308,5 +408,6 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
     provider: modelRow.provider,
     taskType: intent.task_type,
     intentReasoning: intent.reasoning,
+    warnings,
   };
 }

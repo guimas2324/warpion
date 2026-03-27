@@ -14,7 +14,6 @@ import type {
   SettingsTab,
   UsagePayload,
 } from "@/components/settings/types";
-import { PurchaseModal } from "@/components/tokens/PurchaseModal";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -40,38 +39,45 @@ export default function SettingsPage() {
 
   const loadAll = useCallback(async () => {
     setLoadingUsage(true);
-    const [profileRes, planRes, usageRes] = await Promise.all([
-      fetch("/api/settings/profile"),
-      fetch("/api/settings/plan"),
-      fetch(`/api/tokens/usage?period=${period}`),
-    ]);
-    const [purchasesRes, requestsRes] = await Promise.all([
-      fetch("/api/settings/purchases"),
-      fetch("/api/settings/data-requests"),
-    ]);
+    try {
+      const [profileRes, planRes, usageRes] = await Promise.all([
+        fetch("/api/settings/profile"),
+        fetch("/api/settings/plan"),
+        fetch(`/api/tokens/usage?period=${period}`),
+      ]);
+      const [purchasesRes, requestsRes] = await Promise.all([
+        fetch("/api/settings/purchases"),
+        fetch("/api/settings/data-requests"),
+      ]);
 
-    if (profileRes.ok) {
-      const json = (await profileRes.json()) as { data: ProfileData };
-      setProfile(json.data);
-      setDraftName(json.data.full_name ?? "");
-      setDraftAvatar(json.data.avatar_url ?? "");
-    }
-    if (planRes.ok) {
-      const json = (await planRes.json()) as { data: PlanData };
-      setPlan(json.data);
-    }
-    if (usageRes.ok) {
-      const json = (await usageRes.json()) as { data: UsagePayload };
-      setUsage(json.data ?? null);
+      if (profileRes.ok) {
+        const json = (await profileRes.json()) as { data: ProfileData };
+        setProfile(json.data);
+        setDraftName(json.data.full_name ?? "");
+        setDraftAvatar(json.data.avatar_url ?? "");
+      }
+      if (planRes.ok) {
+        const json = (await planRes.json()) as { data: PlanData };
+        setPlan(json.data);
+      }
+      if (usageRes.ok) {
+        const json = (await usageRes.json()) as { data: UsagePayload };
+        setUsage(json.data ?? null);
+      } else {
+        setUsage(null);
+      }
+      if (purchasesRes.ok) {
+        const json = (await purchasesRes.json()) as { data: PurchaseItem[] };
+        setPurchases(json.data ?? []);
+      }
+      if (requestsRes.ok) {
+        const json = (await requestsRes.json()) as { data: DataRequestItem[] };
+        setDataRequests(json.data ?? []);
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Falha ao carregar configurações.");
+    } finally {
       setLoadingUsage(false);
-    }
-    if (purchasesRes.ok) {
-      const json = (await purchasesRes.json()) as { data: PurchaseItem[] };
-      setPurchases(json.data ?? []);
-    }
-    if (requestsRes.ok) {
-      const json = (await requestsRes.json()) as { data: DataRequestItem[] };
-      setDataRequests(json.data ?? []);
     }
   }, [period]);
 
@@ -196,14 +202,6 @@ export default function SettingsPage() {
           onRequestDelete={() => void createDataRequest("delete")}
         />
       ) : null}
-      <PurchaseModal
-        open={purchaseOpen}
-        onClose={() => setPurchaseOpen(false)}
-        onPurchased={() => {
-          setMessage("Compra registrada com sucesso.");
-          void loadAll();
-        }}
-      />
     </div>
   );
 }

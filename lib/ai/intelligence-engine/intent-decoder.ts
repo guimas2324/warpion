@@ -3,6 +3,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getProviderModel } from "@/lib/ai/providers";
 import { detectTaskType } from "@/lib/ai/task-detector";
 import type { ChatMode, TaskType } from "@/types/chat";
+import { extractTokenUsage } from "@/lib/ai/usage";
+
+type IntentUsage = {
+  modelId: string;
+  provider: string;
+  inputTokens: number;
+  outputTokens: number;
+};
 
 export type IntentDecoderResult = {
   task_type: TaskType;
@@ -10,6 +18,7 @@ export type IntentDecoderResult = {
   ambiguous: boolean;
   recommended_model: string;
   reasoning: string;
+  usage?: IntentUsage;
 };
 
 const CHEAP_MODEL_PREFERENCE = ["claude-haiku-4-5", "gemini-3-flash", "deepseek-v3.2"];
@@ -79,6 +88,7 @@ export async function decodeIntent(params: {
     });
     const parsed = parseIntentJson(result.text);
     const complexity = Math.max(1, Math.min(5, Number(parsed.complexity ?? 3))) as 1 | 2 | 3 | 4 | 5;
+    const usage = extractTokenUsage(result.usage);
 
     return {
       task_type: (parsed.task_type as TaskType) ?? heuristicTask,
@@ -86,6 +96,12 @@ export async function decodeIntent(params: {
       ambiguous: Boolean(parsed.ambiguous),
       recommended_model: String(parsed.recommended_model ?? selectedModelId ?? cheap.id),
       reasoning: String(parsed.reasoning ?? "Decoded by cheap classifier model."),
+      usage: {
+        modelId: cheap.id,
+        provider: cheap.provider,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+      },
     };
   } catch {
     return {

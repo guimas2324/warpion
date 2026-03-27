@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { runGroupWorkPhase, type GroupWorkAgent, type GroupWorkPhase } from "@/lib/ai/group-work-engine";
+import { ensureSufficientTokens } from "@/lib/ai/token-balance";
 
 type RequestBody = {
   message: string;
@@ -24,6 +25,15 @@ export async function POST(request: Request) {
   const body = (await request.json()) as RequestBody;
   if (!body.message?.trim() || !body.specialty?.trim()) {
     return new Response("message and specialty are required", { status: 400 });
+  }
+  const estimatedRawTokens = Math.max(6000, Math.ceil(body.message.trim().length / 4) * 8);
+  const precheck = await ensureSufficientTokens({
+    supabase,
+    userId: user.id,
+    requiredTokens: estimatedRawTokens,
+  });
+  if (!precheck.ok) {
+    return new Response("Insufficient tokens", { status: 402 });
   }
 
   const { data: specialtyRow, error: specialtyError } = await supabase

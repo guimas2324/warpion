@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -12,8 +12,19 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+
+  useEffect(() => {
+    const hash = typeof window !== "undefined" ? window.location.hash : "";
+    const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
+    if (params.get("type") === "recovery") {
+      setRecoveryMode(true);
+      setInfo("Defina sua nova senha para concluir a recuperação.");
+    }
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -42,7 +53,7 @@ export default function LoginPage() {
     setResetLoading(true);
     try {
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/login`,
+        redirectTo: `${window.location.origin}/login#type=recovery`,
       });
       if (resetError) throw resetError;
       setInfo("Enviamos um link de recuperação para seu email.");
@@ -54,6 +65,31 @@ export default function LoginPage() {
     }
   }
 
+  async function onUpdatePassword() {
+    if (newPassword.length < 8) {
+      setError("A nova senha deve ter no mínimo 8 caracteres.");
+      return;
+    }
+    setError(null);
+    setInfo(null);
+    setLoading(true);
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) throw updateError;
+      setRecoveryMode(false);
+      setNewPassword("");
+      if (typeof window !== "undefined") {
+        window.history.replaceState({}, document.title, "/login");
+      }
+      setInfo("Senha atualizada com sucesso. Faça login com a nova senha.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Falha ao atualizar senha";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 shadow-sm">
       <div className="mb-4">
@@ -62,8 +98,9 @@ export default function LoginPage() {
       </div>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-1">
-          <label className="text-sm font-medium text-zinc-100">Email</label>
+          <label htmlFor="login-email" className="text-sm font-medium text-zinc-100">Email</label>
           <input
+            id="login-email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             type="email"
@@ -76,7 +113,7 @@ export default function LoginPage() {
 
         <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-zinc-100">Senha</label>
+            <label htmlFor="login-password" className="text-sm font-medium text-zinc-100">Senha</label>
             <button
               type="button"
               onClick={onResetPassword}
@@ -87,6 +124,7 @@ export default function LoginPage() {
             </button>
           </div>
           <input
+            id="login-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             type="password"
@@ -111,6 +149,30 @@ export default function LoginPage() {
         >
           {loading ? "Entrando..." : "Entrar"}
         </button>
+        {recoveryMode ? (
+          <div className="space-y-2 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
+            <label htmlFor="login-new-password" className="text-sm font-medium text-zinc-100">
+              Nova senha
+            </label>
+            <input
+              id="login-new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              type="password"
+              autoComplete="new-password"
+              className="h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none ring-0 placeholder:text-zinc-500 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+              placeholder="Mínimo 8 caracteres"
+            />
+            <button
+              type="button"
+              onClick={() => void onUpdatePassword()}
+              disabled={loading}
+              className="h-10 rounded-xl bg-indigo-600 px-4 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
+            >
+              {loading ? "Atualizando..." : "Atualizar senha"}
+            </button>
+          </div>
+        ) : null}
 
         <div className="text-sm text-zinc-400">
           Não tem conta?{" "}

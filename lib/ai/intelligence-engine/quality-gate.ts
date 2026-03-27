@@ -2,12 +2,21 @@ import { generateText } from "ai";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getProviderModel } from "@/lib/ai/providers";
 import type { TaskType } from "@/types/chat";
+import { extractTokenUsage } from "@/lib/ai/usage";
+
+type QualityUsage = {
+  modelId: string;
+  provider: string;
+  inputTokens: number;
+  outputTokens: number;
+};
 
 export type QualityGateResult = {
   passed: boolean;
   issues: string[];
   completeness: number;
   suggestion: string;
+  usage?: QualityUsage;
 };
 
 const CHEAP_MODEL_PREFERENCE = ["claude-haiku-4-5", "gemini-3-flash", "deepseek-v3.2"];
@@ -72,11 +81,18 @@ export async function runQualityGate(params: {
     });
     const parsed = parseQualityJson(result.text);
     const completeness = Math.max(0, Math.min(100, Number(parsed.completeness ?? 80)));
+    const usage = extractTokenUsage(result.usage);
     return {
       passed: Boolean(parsed.passed ?? true),
       issues: Array.isArray(parsed.issues) ? parsed.issues.map(String) : [],
       completeness,
       suggestion: String(parsed.suggestion ?? ""),
+      usage: {
+        modelId: cheap.id,
+        provider: cheap.provider,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+      },
     };
   } catch {
     return {

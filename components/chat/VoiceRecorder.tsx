@@ -17,6 +17,7 @@ export function VoiceRecorder({ onTranscribed }: VoiceRecorderProps) {
   const [recording, setRecording] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [seconds, setSeconds] = useState(0);
+  const [error, setError] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
@@ -28,17 +29,34 @@ export function VoiceRecorder({ onTranscribed }: VoiceRecorderProps) {
   }, [recording]);
 
   async function startRecording() {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
-    chunksRef.current = [];
-    streamRef.current = stream;
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) chunksRef.current.push(event.data);
-    };
-    recorder.start();
-    mediaRecorderRef.current = recorder;
-    setSeconds(0);
-    setRecording(true);
+    setError(null);
+    try {
+      if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Gravação de áudio não suportada neste navegador.");
+      }
+
+      const preferredMimeTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+      const mimeType = preferredMimeTypes.find((item) => MediaRecorder.isTypeSupported(item));
+      if (!mimeType) {
+        throw new Error("Codec de áudio não suportado no navegador atual.");
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream, { mimeType });
+      chunksRef.current = [];
+      streamRef.current = stream;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data);
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setSeconds(0);
+      setRecording(true);
+    } catch (err) {
+      setRecording(false);
+      setProcessing(false);
+      setError(err instanceof Error ? err.message : "Não foi possível iniciar a gravação.");
+    }
   }
 
   async function stopRecording() {
@@ -66,31 +84,38 @@ export function VoiceRecorder({ onTranscribed }: VoiceRecorderProps) {
       if (response.ok && payload.data?.text) {
         onTranscribed(payload.data.text);
       } else {
-        console.warn(payload.error ?? "Falha ao transcrever audio.");
+        setError(payload.error ?? "Falha ao transcrever áudio.");
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao enviar áudio.");
     } finally {
       setProcessing(false);
     }
   }
 
   return (
-    <button
-      type="button"
-      onClick={() => {
-        if (processing) return;
-        if (!recording) {
-          void startRecording();
-        } else {
-          void stopRecording();
-        }
-      }}
-      className={`inline-flex h-11 items-center rounded-xl border px-3 text-sm ${
-        recording
-          ? "border-red-500/60 bg-red-500/10 text-red-300"
-          : "border-zinc-700 text-zinc-200 hover:bg-zinc-900/50"
-      }`}
-    >
-      {processing ? "⏳" : recording ? `🔴 ${formatDuration(seconds)}` : "🎙️"}
-    </button>
+    <div className="flex flex-col items-start gap-1">
+      <button
+        type="button"
+        onClick={() => {
+          if (processing) return;
+          if (!recording) {
+            void startRecording();
+          } else {
+            void stopRecording();
+          }
+        }}
+        aria-label={recording ? "Parar gravação de voz" : "Iniciar gravação de voz"}
+        title={recording ? "Parar gravação de voz" : "Iniciar gravação de voz"}
+        className={`inline-flex h-11 items-center rounded-xl border px-3 text-sm ${
+          recording
+            ? "border-red-500/60 bg-red-500/10 text-red-300"
+            : "border-zinc-700 text-zinc-200 hover:bg-zinc-900/50"
+        }`}
+      >
+        {processing ? "⏳" : recording ? `🔴 ${formatDuration(seconds)}` : "🎙️"}
+      </button>
+      {error ? <div className="max-w-44 text-[11px] text-red-300">{error}</div> : null}
+    </div>
   );
 }

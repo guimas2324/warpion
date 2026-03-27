@@ -254,7 +254,11 @@ export function InputBar({
           </div>
         ) : null}
       </div>
-      <label className="inline-flex h-11 cursor-pointer items-center rounded-xl border border-zinc-700 px-3 text-sm text-zinc-200 hover:bg-zinc-900/50">
+      <label
+        aria-label="Anexar arquivos"
+        title="Anexar arquivos"
+        className="inline-flex h-11 cursor-pointer items-center rounded-xl border border-zinc-700 px-3 text-sm text-zinc-200 hover:bg-zinc-900/50"
+      >
         📎
         <input
           type="file"
