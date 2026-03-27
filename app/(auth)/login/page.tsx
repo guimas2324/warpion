@@ -91,14 +91,14 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 shadow-sm">
-      <div className="mb-4">
-        <div className="text-2xl font-semibold tracking-tight text-zinc-100">Entrar</div>
-        <div className="mt-1 text-sm text-zinc-400">Acesse sua conta para abrir o workspace.</div>
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-7 shadow-[0_20px_50px_rgba(0,0,0,0.35)]">
+      <div className="mb-5">
+        <div className="text-2xl font-semibold tracking-tight text-zinc-100">Welcome back</div>
+        <div className="mt-1 text-sm text-zinc-400">Sign in to continue in your WARPION workspace.</div>
       </div>
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-1">
-          <label htmlFor="login-email" className="text-sm font-medium text-zinc-100">Email</label>
+            <label htmlFor="login-email" className="text-sm font-medium text-zinc-200">Email</label>
           <input
             id="login-email"
             value={email}
@@ -113,14 +113,14 @@ export default function LoginPage() {
 
         <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <label htmlFor="login-password" className="text-sm font-medium text-zinc-100">Senha</label>
+            <label htmlFor="login-password" className="text-sm font-medium text-zinc-200">Password</label>
             <button
               type="button"
               onClick={onResetPassword}
               disabled={resetLoading}
               className="text-xs text-indigo-300 hover:text-indigo-200 disabled:opacity-50"
             >
-              {resetLoading ? "Enviando..." : "Esqueceu a senha?"}
+              {resetLoading ? "Sending..." : "Forgot password?"}
             </button>
           </div>
           <input
@@ -147,12 +147,12 @@ export default function LoginPage() {
           className="h-11 w-full rounded-xl bg-indigo-600 px-4 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
           type="submit"
         >
-          {loading ? "Entrando..." : "Entrar"}
+          {loading ? "Signing in..." : "Sign in"}
         </button>
         {recoveryMode ? (
           <div className="space-y-2 rounded-xl border border-zinc-700 bg-zinc-950/70 p-3">
             <label htmlFor="login-new-password" className="text-sm font-medium text-zinc-100">
-              Nova senha
+              New password
             </label>
             <input
               id="login-new-password"
@@ -161,7 +161,7 @@ export default function LoginPage() {
               type="password"
               autoComplete="new-password"
               className="h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none ring-0 placeholder:text-zinc-500 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-              placeholder="Mínimo 8 caracteres"
+              placeholder="At least 8 characters"
             />
             <button
               type="button"
@@ -169,15 +169,15 @@ export default function LoginPage() {
               disabled={loading}
               className="h-10 rounded-xl bg-indigo-600 px-4 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
             >
-              {loading ? "Atualizando..." : "Atualizar senha"}
+              {loading ? "Updating..." : "Update password"}
             </button>
           </div>
         ) : null}
 
-        <div className="text-sm text-zinc-400">
-          Não tem conta?{" "}
+        <div className="pt-1 text-sm text-zinc-400">
+          No account yet?{" "}
           <a className="font-medium text-zinc-100 underline-offset-4 hover:underline" href="/register">
-            Criar conta grátis
+            Create one free
           </a>
         </div>
       </form>

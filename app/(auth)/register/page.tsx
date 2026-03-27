@@ -50,19 +50,19 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 shadow-sm">
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-7 shadow-[0_20px_50px_rgba(0,0,0,0.35)]">
       <div className="mb-4">
         <div className="text-2xl font-semibold tracking-tight text-zinc-100">
-          Criar conta
+          Create account
         </div>
         <div className="mt-1 text-sm text-zinc-400">
-          Comece com 50.000 tokens grátis.
+          Start with 50,000 free tokens.
         </div>
       </div>
 
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-1">
-          <label htmlFor="register-full-name" className="text-sm font-medium text-zinc-100">Nome completo</label>
+          <label htmlFor="register-full-name" className="text-sm font-medium text-zinc-200">Full name</label>
           <input
             id="register-full-name"
             value={fullName}
@@ -70,13 +70,13 @@ export default function RegisterPage() {
             type="text"
             autoComplete="name"
             className="h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none ring-0 placeholder:text-zinc-500 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-            placeholder="Seu nome"
+            placeholder="Your name"
             required
           />
         </div>
 
         <div className="space-y-1">
-          <label htmlFor="register-email" className="text-sm font-medium text-zinc-100">Email</label>
+          <label htmlFor="register-email" className="text-sm font-medium text-zinc-200">Email</label>
           <input
             id="register-email"
             value={email}
@@ -90,7 +90,7 @@ export default function RegisterPage() {
         </div>
 
         <div className="space-y-1">
-          <label htmlFor="register-password" className="text-sm font-medium text-zinc-100">Senha</label>
+          <label htmlFor="register-password" className="text-sm font-medium text-zinc-200">Password</label>
           <input
             id="register-password"
             value={password}
@@ -99,11 +99,11 @@ export default function RegisterPage() {
             autoComplete="new-password"
             required
             className="h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none ring-0 placeholder:text-zinc-500 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-            placeholder="Mínimo 8 caracteres"
+            placeholder="At least 8 characters"
           />
         </div>
         <div className="space-y-1">
-          <label htmlFor="register-confirm-password" className="text-sm font-medium text-zinc-100">Confirmar senha</label>
+          <label htmlFor="register-confirm-password" className="text-sm font-medium text-zinc-200">Confirm password</label>
           <input
             id="register-confirm-password"
             value={confirmPassword}
@@ -112,7 +112,7 @@ export default function RegisterPage() {
             autoComplete="new-password"
             required
             className="h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none ring-0 placeholder:text-zinc-500 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-            placeholder="Repita a senha"
+            placeholder="Repeat password"
           />
         </div>
         <label className="flex items-start gap-2 rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-300">
@@ -124,13 +124,13 @@ export default function RegisterPage() {
             className="mt-0.5 h-4 w-4 accent-indigo-500"
           />
           <span>
-            Li e aceito os{" "}
+            I agree to the{" "}
             <a href="/terms" target="_blank" rel="noreferrer" className="text-indigo-300 underline underline-offset-4">
-              Termos de Uso
+              Terms of Service
             </a>{" "}
-            e a{" "}
+            and{" "}
             <a href="/privacy" target="_blank" rel="noreferrer" className="text-indigo-300 underline underline-offset-4">
-              Política de Privacidade
+              Privacy Policy
             </a>
             .
           </span>
@@ -147,13 +147,13 @@ export default function RegisterPage() {
           className="h-11 w-full rounded-xl bg-indigo-600 px-4 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
           type="submit"
         >
-          {loading ? "Criando..." : "Criar conta grátis"}
+          {loading ? "Creating..." : "Create free account"}
         </button>
 
         <div className="text-sm text-zinc-400">
-          Já tem conta?{" "}
+          Already have an account?{" "}
           <a className="font-medium text-zinc-100 underline-offset-4 hover:underline" href="/login">
-            Entrar
+            Sign in
           </a>
         </div>
       </form>
