@@ -5,6 +5,8 @@ export type ModelCatalogItem = {
   display_name: string;
   description: string | null;
   is_active: boolean;
+  model_type: "text" | "image" | "audio" | string;
+  token_multiplier: number | null;
   supports_streaming: boolean | null;
   supports_vision: boolean | null;
   supports_tools: boolean | null;

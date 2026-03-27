@@ -103,7 +103,8 @@ export async function POST(request: Request) {
           metadata: {
             routed_task_type: params.taskType,
             mode: body.mode,
-            intent_reasoning: params.taskType,
+            model: params.selectedModelId,
+            provider: params.provider,
           },
         });
 

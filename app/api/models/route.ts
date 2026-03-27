@@ -16,8 +16,9 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from("model_catalog")
-      .select("id, provider, litellm_id, display_name, description, is_active, supports_streaming, supports_vision, supports_tools, speed_tier")
+      .select("id, provider, litellm_id, display_name, description, is_active, model_type, token_multiplier, supports_streaming, supports_vision, supports_tools, speed_tier")
       .eq("is_active", true)
+      .eq("model_type", "text")
       .order("sort_order", { ascending: true });
 
     if (error) throw error;

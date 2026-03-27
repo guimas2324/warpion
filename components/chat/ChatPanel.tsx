@@ -18,6 +18,8 @@ type ModelDTO = {
   provider: string;
   litellm_id: string | null;
   is_active: boolean;
+  model_type: string;
+  token_multiplier: number | null;
   description: string | null;
   supports_streaming: boolean | null;
   supports_vision: boolean | null;
@@ -80,6 +82,16 @@ export function ChatPanel() {
     },
   });
 
+  const latestAutoInfo = useMemo(() => {
+    const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+    if (!lastAssistant) return undefined;
+    const meta = (lastAssistant.metadata ?? {}) as Record<string, unknown>;
+    const model = typeof meta.model === "string" ? meta.model : undefined;
+    const taskType = typeof meta.routed_task_type === "string" ? meta.routed_task_type : undefined;
+    if (!model) return undefined;
+    return { model, taskType };
+  }, [messages]);
+
   useEffect(() => {
     async function load() {
       const [modelsRes, convRes, profileRes] = await Promise.all([
@@ -135,7 +147,7 @@ export function ChatPanel() {
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ModeToggle />
-          <ModelSelector />
+          <ModelSelector autoDetails={latestAutoInfo} />
         </div>
       </div>
 
