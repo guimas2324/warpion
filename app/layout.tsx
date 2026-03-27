@@ -13,8 +13,36 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "WARPION",
-  description: "Multi-AI orchestration platform",
+  title: "WARPION — Orquestração Multi-IA com Intelligence Engine",
+  description:
+    "Combine OpenAI, Anthropic, Google, DeepSeek e xAI em um sistema com otimização automática para Chat, Group Work, Hard Work e Automação.",
+  keywords: [
+    "IA",
+    "inteligência artificial",
+    "multi-IA",
+    "ChatGPT alternativa",
+    "Claude",
+    "Gemini",
+    "orquestração IA",
+  ],
+  metadataBase: new URL("https://warpionai.com"),
+  openGraph: {
+    title: "WARPION — Orquestração Multi-IA",
+    description: "16+ modelos de IA em 4 ferramentas com Intelligence Engine",
+    url: "https://warpionai.com",
+    siteName: "WARPION",
+    type: "website",
+    locale: "pt_BR",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "WARPION — Orquestração Multi-IA",
+    description: "16+ modelos de IA em 4 ferramentas com Intelligence Engine",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({
