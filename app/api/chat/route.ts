@@ -232,6 +232,7 @@ export async function POST(request: Request) {
       mode: body.mode,
       modelId: body.model_id,
       history: body.history ?? [],
+      attachments: body.attachments ?? [],
       toolType: "chat",
       conversationId,
       requestIp: clientIp ?? undefined,

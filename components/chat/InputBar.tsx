@@ -5,6 +5,29 @@ import type { ChatAttachment } from "@/types/chat";
 import { useChatStore } from "@/stores/chat-store";
 import { useModelStore } from "@/stores/model-store";
 
+const MAX_ATTACHMENT_SIZE_BYTES = 50 * 1024 * 1024;
+const MAX_ATTACHMENTS_PER_MESSAGE = 5;
+const ACCEPTED_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "application/pdf",
+  "text/plain",
+  "text/markdown",
+  "text/csv",
+  "application/json",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
+const ACCEPTED_EXTENSIONS = [".py", ".js", ".ts", ".md", ".csv", ".json", ".txt", ".xlsx", ".docx"];
+
+type UploadStatus = {
+  name: string;
+  status: "uploading" | "error";
+  error?: string;
+};
+
 export function InputBar({
   onSend,
   onStop,
@@ -23,6 +46,8 @@ export function InputBar({
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus[]>([]);
   const modelId = useChatStore((s) => s.modelId);
   const tokensRemaining = useChatStore((s) => s.tokensRemaining);
   const models = useModelStore((s) => s.models);
@@ -81,21 +106,72 @@ export function InputBar({
   async function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
+    setUploadErrors([]);
+
+    if (attachments.length + files.length > MAX_ATTACHMENTS_PER_MESSAGE) {
+      setUploadErrors([
+        `Limite de ${MAX_ATTACHMENTS_PER_MESSAGE} arquivos por mensagem.`,
+      ]);
+      e.target.value = "";
+      return;
+    }
+
+    const validFiles: File[] = [];
+    const nextErrors: string[] = [];
+    for (const file of files) {
+      const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+      const isMimeAllowed =
+        ACCEPTED_MIME_TYPES.has(file.type) ||
+        ACCEPTED_EXTENSIONS.includes(ext);
+      if (!isMimeAllowed) {
+        nextErrors.push(`${file.name}: tipo nao permitido.`);
+        continue;
+      }
+      if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
+        nextErrors.push(`${file.name}: excede 50MB.`);
+        continue;
+      }
+      validFiles.push(file);
+    }
+    if (nextErrors.length > 0) {
+      setUploadErrors(nextErrors);
+    }
+    if (!validFiles.length) {
+      e.target.value = "";
+      return;
+    }
+
     setUploading(true);
     try {
       const uploaded: ChatAttachment[] = [];
-      for (const file of files) {
+      for (const file of validFiles) {
+        setUploadStatus((prev) => [...prev, { name: file.name, status: "uploading" }]);
         const data = new FormData();
         data.append("file", file);
         const res = await fetch("/api/uploads", { method: "POST", body: data });
-        const json = (await res.json()) as { data?: ChatAttachment };
-        if (res.ok && json.data) uploaded.push(json.data);
+        const json = (await res.json()) as { data?: ChatAttachment; error?: string };
+        if (res.ok && json.data) {
+          uploaded.push(json.data);
+          setUploadStatus((prev) => prev.filter((entry) => entry.name !== file.name));
+        } else {
+          setUploadStatus((prev) =>
+            prev.map((entry) =>
+              entry.name === file.name
+                ? { name: file.name, status: "error", error: json.error ?? "Falha no upload." }
+                : entry,
+            ),
+          );
+        }
       }
       setAttachments((prev) => [...prev, ...uploaded]);
     } finally {
       setUploading(false);
       e.target.value = "";
     }
+  }
+
+  function removeAttachment(path: string) {
+    setAttachments((prev) => prev.filter((item) => item.path !== path));
   }
 
   useEffect(() => {
@@ -108,14 +184,48 @@ export function InputBar({
     <form onSubmit={submit} className="flex gap-2">
       <div className="flex flex-1 flex-col gap-2">
         {!!attachments.length && (
-          <div className="flex flex-wrap gap-1">
+          <div className="space-y-2">
             {attachments.map((a) => (
-              <span key={a.path} className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs dark:bg-zinc-900">
-                {a.name}
-              </span>
+              <div key={a.path} className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900/70 px-2 py-1 text-xs text-zinc-200">
+                {a.mimeType.startsWith("image/") && a.publicUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={a.publicUrl} alt={a.name} className="h-10 w-10 rounded-md object-cover" />
+                ) : (
+                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-zinc-800 text-sm">📎</span>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate">{a.name}</div>
+                  <div className="text-[11px] text-zinc-500">
+                    {(a.size / 1024 / 1024).toFixed(2)} MB
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeAttachment(a.path)}
+                  className="rounded border border-zinc-600 px-1.5 py-0.5 text-[11px] hover:bg-zinc-800"
+                >
+                  ×
+                </button>
+              </div>
             ))}
           </div>
         )}
+        {uploadStatus.length > 0 ? (
+          <div className="space-y-1 text-xs">
+            {uploadStatus.map((entry) => (
+              <div key={entry.name} className="rounded-md border border-zinc-700 bg-zinc-900/60 px-2 py-1 text-zinc-300">
+                {entry.status === "uploading" ? `Enviando ${entry.name}...` : `${entry.name}: ${entry.error ?? "Falha no upload."}`}
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {uploadErrors.length > 0 ? (
+          <div className="space-y-1 text-xs text-red-300">
+            {uploadErrors.map((entry) => (
+              <div key={entry}>{entry}</div>
+            ))}
+          </div>
+        ) : null}
         <textarea
           ref={textareaRef}
           rows={1}
@@ -145,7 +255,13 @@ export function InputBar({
       </div>
       <label className="inline-flex h-11 cursor-pointer items-center rounded-xl border border-zinc-700 px-3 text-sm text-zinc-200 hover:bg-zinc-900/50">
         📎
-        <input type="file" className="hidden" multiple onChange={onFileChange} />
+        <input
+          type="file"
+          className="hidden"
+          multiple
+          onChange={onFileChange}
+          accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,text/markdown,text/csv,application/json,.py,.js,.ts,.xlsx,.docx"
+        />
       </label>
       {isStreaming ? (
         <button

@@ -1,8 +1,9 @@
 import { generateText, streamText } from "ai";
+import type { ModelMessage } from "ai";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getProviderModel } from "@/lib/ai/providers";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import type { ChatMode, TaskType, UiChatMessage } from "@/types/chat";
+import type { ChatAttachment, ChatMode, TaskType, UiChatMessage } from "@/types/chat";
 import { extractTokenUsage } from "@/lib/ai/usage";
 import { buildArchitectedPrompt } from "@/lib/ai/intelligence-engine/prompt-architect";
 import { decodeIntent } from "@/lib/ai/intelligence-engine/intent-decoder";
@@ -18,6 +19,7 @@ type ProcessParams = {
   mode: ChatMode;
   modelId?: string;
   history?: UiChatMessage[];
+  attachments?: ChatAttachment[];
   toolType: ToolType;
   conversationId?: string;
   requestIp?: string;
@@ -65,13 +67,13 @@ async function modelExists(supabase: SupabaseClient, modelId: string) {
 async function resolveModelRow(supabase: SupabaseClient, modelId: string) {
   const { data, error } = await supabase
     .from("model_catalog")
-    .select("id, provider, display_name, model_type")
+    .select("id, provider, display_name, model_type, supports_vision")
     .eq("id", modelId)
     .eq("is_active", true)
     .eq("model_type", "text")
     .single();
   if (error || !data) throw error ?? new Error("Model not found");
-  return data as { id: string; provider: string; display_name: string; model_type: string };
+  return data as { id: string; provider: string; display_name: string; model_type: string; supports_vision?: boolean | null };
 }
 
 export async function processWithIntelligenceEngine(params: ProcessParams): Promise<EngineResult> {
@@ -82,6 +84,7 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
     mode,
     modelId,
     history = [],
+    attachments = [],
     toolType,
     conversationId,
     requestIp,
@@ -137,13 +140,28 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
     console.error("Admin client unavailable in intelligence engine, proceeding without private RPCs:", adminError);
     admin = null;
   }
-  const modelMessages = [
+  const modelMessages: ModelMessage[] = [
     ...history.map((m) => ({
       role: m.role as "user" | "assistant" | "system",
       content: m.content,
     })),
     { role: "user" as const, content: message },
   ];
+
+  const imageAttachments = attachments.filter(
+    (item) => item.mimeType.startsWith("image/") && typeof item.publicUrl === "string" && item.publicUrl.length > 0,
+  );
+  if (imageAttachments.length > 0 && modelRow.supports_vision) {
+    modelMessages[modelMessages.length - 1] = {
+      role: "user",
+      content: [
+        { type: "text" as const, text: message },
+        ...imageAttachments.map((img) => ({ type: "image" as const, image: img.publicUrl as string })),
+      ],
+    };
+  } else if (imageAttachments.length > 0 && !modelRow.supports_vision) {
+    console.warn(`Model ${selectedModelId} does not support vision. Image attachments ignored.`);
+  }
 
   const abort = new AbortController();
   const timeout = setTimeout(() => abort.abort("timeout"), 30_000);

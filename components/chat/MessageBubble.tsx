@@ -65,11 +65,30 @@ export function MessageBubble({
 
         {isUser ? <div className="whitespace-pre-wrap">{content}</div> : <MarkdownRenderer content={content} />}
         {!!attachments?.length && (
-          <div className="mt-2 space-y-1 text-xs text-zinc-300">
+          <div className="mt-2 space-y-2 text-xs text-zinc-300">
             {attachments.map((a) => (
-              <a key={a.path} href={a.publicUrl} target="_blank" rel="noreferrer" className="block underline underline-offset-2 hover:text-indigo-300">
-                {a.name}
-              </a>
+              <div key={a.path}>
+                {a.mimeType.startsWith("image/") && a.publicUrl ? (
+                  <a href={a.publicUrl} target="_blank" rel="noreferrer" className="inline-block">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={a.publicUrl}
+                      alt={a.name}
+                      className="max-h-[320px] max-w-[400px] rounded-lg border border-zinc-700 object-contain"
+                    />
+                  </a>
+                ) : (
+                  <a
+                    href={a.publicUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900/50 px-2 py-1 underline underline-offset-2 hover:text-indigo-300"
+                  >
+                    <span>📄</span>
+                    <span className="truncate">{a.name}</span>
+                  </a>
+                )}
+              </div>
             ))}
           </div>
         )}
