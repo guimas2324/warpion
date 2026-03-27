@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatAttachment } from "@/types/chat";
+import { useChatStore } from "@/stores/chat-store";
+import { useModelStore } from "@/stores/model-store";
 
 export function InputBar({
   onSend,
@@ -21,8 +23,16 @@ export function InputBar({
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
+  const modelId = useChatStore((s) => s.modelId);
+  const tokensRemaining = useChatStore((s) => s.tokensRemaining);
+  const models = useModelStore((s) => s.models);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const charCount = value.length;
+  const selectedModel = models.find((item) => item.id === modelId);
+  const modelMultiplier = Number(selectedModel?.token_multiplier ?? 1);
+  const estimatedRawTokens = Math.ceil(charCount / 4);
+  const estimatedTokens = Math.max(1, Math.ceil(estimatedRawTokens * modelMultiplier));
+  const estimateOverBudget = estimatedTokens > Math.max(0, tokensRemaining);
   const placeholder = useMemo(() => {
     if (tokensDepleted) {
       return "Tokens esgotados...";
@@ -117,6 +127,20 @@ export function InputBar({
         />
         {charCount > 500 ? (
           <div className="text-right text-xs text-zinc-500">{charCount.toLocaleString()} chars</div>
+        ) : null}
+        {charCount > 100 ? (
+          <div
+            className={`w-fit rounded-md border px-2 py-1 text-xs transition-opacity duration-300 ${
+              estimateOverBudget
+                ? "border-red-500/50 bg-red-500/10 text-red-300"
+                : "border-zinc-700 bg-zinc-900/80 text-zinc-300"
+            }`}
+          >
+            ~{estimatedTokens.toLocaleString("pt-BR")} tokens •{" "}
+            {mode === "auto"
+              ? "Auto (estimativa base)"
+              : `${selectedModel?.display_name ?? "Modelo"} (${modelMultiplier.toFixed(1)}x)`}
+          </div>
         ) : null}
       </div>
       <label className="inline-flex h-11 cursor-pointer items-center rounded-xl border border-zinc-700 px-3 text-sm text-zinc-200 hover:bg-zinc-900/50">
