@@ -25,7 +25,17 @@ type ModelDTO = {
   speed_tier: "fast" | "normal" | "slow" | null;
 };
 type ProfileDTO = { tokens_remaining: number };
-type ConversationMessageDTO = { id: string; role: "user" | "assistant" | "system"; content: string; attachments?: ChatAttachment[] };
+type ConversationMessageDTO = {
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  attachments?: ChatAttachment[];
+  model?: string | null;
+  provider?: string | null;
+  tokens_input?: number | null;
+  tokens_output?: number | null;
+  metadata?: Record<string, unknown> | null;
+};
 
 function getMessageText(message: UIMessage) {
   return (message.parts ?? [])
@@ -38,12 +48,10 @@ export function ChatPanel() {
   const mode = useChatStore((s) => s.mode);
   const modelId = useChatStore((s) => s.modelId);
   const selectedConversationId = useChatStore((s) => s.selectedConversationId);
-  const setSelectedConversationId = useChatStore((s) => s.setSelectedConversationId);
   const setConversations = useChatStore((s) => s.setConversations);
   const tokensRemaining = useChatStore((s) => s.tokensRemaining);
   const setTokensRemaining = useChatStore((s) => s.setTokensRemaining);
   const setModels = useModelStore((s) => s.setModels);
-  const [lastSelectedModel, setLastSelectedModel] = useState<string>("");
   const [lastPrompt, setLastPrompt] = useState<string>("");
   const [error, setError] = useState<string>("");
 
@@ -109,6 +117,13 @@ export function ChatPanel() {
           id: m.id,
           role: m.role,
           parts: [{ type: "text" as const, text: m.content }],
+          metadata: {
+            provider: m.provider ?? undefined,
+            model: m.model ?? undefined,
+            tokens_input: Number(m.tokens_input ?? 0),
+            tokens_output: Number(m.tokens_output ?? 0),
+            attachments: m.attachments ?? [],
+          },
         })),
       );
     }
@@ -122,27 +137,36 @@ export function ChatPanel() {
           <ModeToggle />
           <ModelSelector />
         </div>
-        {mode === "auto" && lastSelectedModel ? (
-          <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs text-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
-            Selected: {lastSelectedModel}
-          </span>
-        ) : null}
       </div>
 
       <div className="mb-3 flex-1 space-y-3 overflow-y-auto rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-black">
-        {messages.map((m: UIMessage) => (
+        {messages.map((m: UIMessage) => {
+          const meta = (m.metadata ?? {}) as Record<string, unknown>;
+          return (
+            <MessageBubble
+              key={m.id}
+              role={m.role as "user" | "assistant"}
+              content={getMessageText(m)}
+              provider={typeof meta.provider === "string" ? meta.provider : undefined}
+              model={typeof meta.model === "string" ? meta.model : undefined}
+              tokens={Number(meta.tokens_input ?? 0) + Number(meta.tokens_output ?? 0)}
+              attachments={Array.isArray(meta.attachments) ? (meta.attachments as ChatAttachment[]) : undefined}
+              onRegenerate={
+                m.role === "assistant" && lastPrompt
+                  ? () => sendMessage({ text: lastPrompt }, { body })
+                  : undefined
+              }
+            />
+          );
+        })}
+        {(status === "submitted" || status === "streaming") ? (
           <MessageBubble
-            key={m.id}
-            role={m.role as "user" | "assistant"}
-            content={getMessageText(m)}
-            onRegenerate={
-              m.role === "assistant" && lastPrompt
-                ? () => sendMessage({ text: lastPrompt }, { body })
-                : undefined
-            }
+            role="assistant"
+            content=""
+            model={mode === "manual" ? modelId : "auto"}
+            thinkingPhase={status === "submitted" ? "Analisando..." : `${mode === "manual" ? modelId : "Warpion"} gerando...`}
           />
-        ))}
-        {status === "streaming" ? <div className="text-sm text-zinc-500">Thinking...</div> : null}
+        ) : null}
         {messages.length === 0 ? <div className="text-sm text-zinc-500">Start a conversation...</div> : null}
       </div>
       {error ? <div className="mb-2 text-sm text-red-500">{error}</div> : null}
