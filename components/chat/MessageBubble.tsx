@@ -10,6 +10,8 @@ export function MessageBubble({
   provider,
   model,
   tokens,
+  tokensInput,
+  tokensOutput,
   thinkingPhase,
   onRegenerate,
 }: {
@@ -19,6 +21,8 @@ export function MessageBubble({
   provider?: string;
   model?: string;
   tokens?: number;
+  tokensInput?: number;
+  tokensOutput?: number;
   thinkingPhase?: string;
   onRegenerate?: () => void;
 }) {
@@ -72,6 +76,12 @@ export function MessageBubble({
         {!isUser && thinkingPhase ? (
           <div className="mt-2 rounded-lg border border-zinc-700 bg-zinc-900/50 px-2 py-1 text-xs text-zinc-300">
             {thinkingPhase}
+          </div>
+        ) : null}
+        {!isUser && typeof tokensInput === "number" && typeof tokensOutput === "number" ? (
+          <div className="mt-2 text-[11px] text-zinc-400">
+            ↑{tokensInput.toLocaleString("pt-BR")} ↓{tokensOutput.toLocaleString("pt-BR")} tokens
+            {model ? ` • via ${model}` : ""}
           </div>
         ) : null}
         {!isUser && (

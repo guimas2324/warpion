@@ -26,7 +26,12 @@ type ModelDTO = {
   supports_tools: boolean | null;
   speed_tier: "fast" | "normal" | "slow" | null;
 };
-type ProfileDTO = { tokens_remaining: number; tokens_used_total?: number };
+type PlanDTO = { tokens_monthly?: number };
+type ProfileSummaryDTO = {
+  tokens_remaining: number;
+  tokens_used_total?: number;
+  plans?: PlanDTO | PlanDTO[];
+};
 type ConversationMessageDTO = {
   id: string;
   role: "user" | "assistant" | "system";
@@ -58,6 +63,7 @@ export function ChatPanel() {
   const setModels = useModelStore((s) => s.setModels);
   const [lastPrompt, setLastPrompt] = useState<string>("");
   const [error, setError] = useState<string>("");
+  const [planTokensMonthly, setPlanTokensMonthly] = useState<number>(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
@@ -82,6 +88,15 @@ export function ChatPanel() {
   const { messages, sendMessage, setMessages, status, stop } = useChat({
     transport,
     onError(err) {
+      const raw = (err.message ?? "").toLowerCase();
+      if (
+        raw.includes("insufficient") ||
+        raw.includes("402") ||
+        raw.includes("token")
+      ) {
+        setError("tokens_depleted");
+        return;
+      }
       setError(err.message);
     },
   });
@@ -112,9 +127,12 @@ export function ChatPanel() {
         setConversations(json.data ?? []);
       }
       if (profileRes.ok) {
-        const json = (await profileRes.json()) as { data: ProfileDTO };
+        const json = (await profileRes.json()) as { data: ProfileSummaryDTO };
         setTokensRemaining(Number(json.data?.tokens_remaining ?? 0));
         setTokensUsedTotal(Number(json.data?.tokens_used_total ?? 0));
+        const rawPlan = json.data?.plans;
+        const resolvedPlan = Array.isArray(rawPlan) ? rawPlan[0] : rawPlan;
+        setPlanTokensMonthly(Number(resolvedPlan?.tokens_monthly ?? 0));
       }
     }
     void load();
@@ -148,15 +166,27 @@ export function ChatPanel() {
   }, [selectedConversationId, setMessages]);
 
   useEffect(() => {
-    async function refreshConversations() {
+    async function refreshConversationsAndTokens() {
       if (status !== "ready") return;
-      const res = await fetch("/api/conversations");
-      if (!res.ok) return;
-      const json = (await res.json()) as { data: ConversationDTO[] };
-      setConversations(json.data ?? []);
+      const [convRes, profileRes] = await Promise.all([
+        fetch("/api/conversations"),
+        fetch("/api/profile/summary", { cache: "no-store" }),
+      ]);
+      if (convRes.ok) {
+        const json = (await convRes.json()) as { data: ConversationDTO[] };
+        setConversations(json.data ?? []);
+      }
+      if (profileRes.ok) {
+        const json = (await profileRes.json()) as { data: ProfileSummaryDTO };
+        setTokensRemaining(Number(json.data?.tokens_remaining ?? 0));
+        setTokensUsedTotal(Number(json.data?.tokens_used_total ?? 0));
+        const rawPlan = json.data?.plans;
+        const resolvedPlan = Array.isArray(rawPlan) ? rawPlan[0] : rawPlan;
+        setPlanTokensMonthly(Number(resolvedPlan?.tokens_monthly ?? 0));
+      }
     }
-    void refreshConversations();
-  }, [messages.length, setConversations, status]);
+    void refreshConversationsAndTokens();
+  }, [messages.length, setConversations, setTokensRemaining, setTokensUsedTotal, status]);
 
   useEffect(() => {
     const node = scrollRef.current;
@@ -205,6 +235,10 @@ export function ChatPanel() {
     return () => window.removeEventListener("warpion:new-chat", handler);
   }, [setMessages, setSelectedConversationId]);
 
+  const monthlyBase = Math.max(1, planTokensMonthly || tokensRemaining + 1);
+  const lowThreshold = Math.floor(monthlyBase * 0.1);
+  const lowPct = Math.max(0, Math.min(100, Math.round((tokensRemaining / monthlyBase) * 100)));
+
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col p-4">
       <div className="mb-3 flex items-center justify-between">
@@ -225,6 +259,8 @@ export function ChatPanel() {
               provider={typeof meta.provider === "string" ? meta.provider : undefined}
               model={typeof meta.model === "string" ? meta.model : undefined}
               tokens={Number(meta.tokens_input ?? 0) + Number(meta.tokens_output ?? 0)}
+              tokensInput={Number(meta.tokens_input ?? 0)}
+              tokensOutput={Number(meta.tokens_output ?? 0)}
               attachments={Array.isArray(meta.attachments) ? (meta.attachments as ChatAttachment[]) : undefined}
               onRegenerate={
                 m.role === "assistant" && lastPrompt
@@ -280,12 +316,36 @@ export function ChatPanel() {
           </button>
         </div>
       ) : null}
-      {error ? <div className="mb-2 text-sm text-red-500">{error}</div> : null}
+      {error === "tokens_depleted" ? (
+        <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-red-500/60 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+          <span>Seus tokens acabaram. Faça upgrade do plano ou compre tokens extras.</span>
+          <div className="flex gap-2">
+            <button onClick={() => (window.location.href = "/settings#plans")} className="rounded-lg border border-red-400/60 px-2 py-1 text-xs hover:bg-red-500/10">
+              Fazer Upgrade
+            </button>
+            <button onClick={() => (window.location.href = "/settings#tokens")} className="rounded-lg border border-red-400/60 px-2 py-1 text-xs hover:bg-red-500/10">
+              Comprar Tokens
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {error && error !== "tokens_depleted" ? <div className="mb-2 text-sm text-red-500">{error}</div> : null}
+      {tokensRemaining > 0 && tokensRemaining <= lowThreshold ? (
+        <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-amber-500/60 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+          <span>
+            Restam apenas {tokensRemaining.toLocaleString("pt-BR")} tokens ({lowPct}%). Considere fazer upgrade.
+          </span>
+          <button onClick={() => (window.location.href = "/settings#plans")} className="rounded-lg border border-amber-400/60 px-2 py-1 text-xs hover:bg-amber-500/10">
+            Ver Planos
+          </button>
+        </div>
+      ) : null}
 
       <InputBar
-        disabled={status === "streaming" || tokensRemaining <= 0}
+        disabled={status === "streaming" || tokensRemaining <= 0 || error === "tokens_depleted"}
         isStreaming={status === "streaming" || status === "submitted"}
         mode={mode}
+        tokensDepleted={tokensRemaining <= 0 || error === "tokens_depleted"}
         onStop={() => {
           stop();
         }}

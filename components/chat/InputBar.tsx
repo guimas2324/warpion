@@ -9,12 +9,14 @@ export function InputBar({
   disabled,
   isStreaming,
   mode,
+  tokensDepleted,
 }: {
   onSend: (value: string, attachments: ChatAttachment[]) => void;
   onStop?: () => void;
   disabled?: boolean;
   isStreaming?: boolean;
   mode?: "manual" | "auto";
+  tokensDepleted?: boolean;
 }) {
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
@@ -22,11 +24,14 @@ export function InputBar({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const charCount = value.length;
   const placeholder = useMemo(() => {
+    if (tokensDepleted) {
+      return "Tokens esgotados...";
+    }
     if (mode === "auto") {
       return "Descreva o objetivo. O WARPION escolhe o melhor modelo...";
     }
     return "Pergunte ao WARPION (Enter envia, Shift+Enter nova linha)";
-  }, [mode]);
+  }, [mode, tokensDepleted]);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
