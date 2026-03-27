@@ -36,12 +36,16 @@ export function getProviderModel(provider: string, catalogModelId: string) {
     return createOpenAI({
       apiKey: process.env.DEEPSEEK_API_KEY!,
       baseURL: "https://api.deepseek.com",
+      // @ai-sdk/openai now applies strict compatibility defaults for compatible providers.
+      name: "deepseek",
     })(apiModelId);
   }
   if (normalized.includes("xai") || normalized.includes("grok")) {
     return createOpenAI({
       apiKey: process.env.XAI_API_KEY!,
       baseURL: "https://api.x.ai/v1",
+      // @ai-sdk/openai now applies strict compatibility defaults for compatible providers.
+      name: "xai",
     })(apiModelId);
   }
 
