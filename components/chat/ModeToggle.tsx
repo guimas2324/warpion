@@ -1,23 +1,29 @@
 "use client";
 
 import { useChatStore } from "@/stores/chat-store";
+import { Sparkles } from "lucide-react";
 
 export function ModeToggle() {
   const mode = useChatStore((s) => s.mode);
   const setMode = useChatStore((s) => s.setMode);
 
   return (
-    <div className="inline-flex rounded-xl border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-zinc-950">
+    <div className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-900 p-1">
       <button
         onClick={() => setMode("manual")}
-        className={`rounded-lg px-3 py-1.5 text-sm ${mode === "manual" ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-600 dark:text-zinc-300"}`}
+        className={`rounded-full px-3 py-1 text-xs transition ${
+          mode === "manual" ? "bg-zinc-200 text-zinc-900" : "text-zinc-400 hover:text-zinc-200"
+        }`}
       >
         Manual
       </button>
       <button
         onClick={() => setMode("auto")}
-        className={`rounded-lg px-3 py-1.5 text-sm ${mode === "auto" ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-600 dark:text-zinc-300"}`}
+        className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs transition ${
+          mode === "auto" ? "bg-indigo-500 text-white" : "text-zinc-400 hover:text-zinc-200"
+        }`}
       >
+        <Sparkles className="h-3 w-3" />
         Auto
       </button>
     </div>

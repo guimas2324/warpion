@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { ModeToggle } from "@/components/chat/ModeToggle";
-import { ModelSelector } from "@/components/chat/ModelSelector";
 import { InputBar } from "@/components/chat/InputBar";
 import { MessageBubble } from "@/components/chat/MessageBubble";
 import { ImageGenerationCard } from "@/components/chat/ImageGenerationCard";
@@ -254,12 +253,15 @@ export function ChatPanel() {
   const lowPct = Math.max(0, Math.min(100, Math.round((tokensRemaining / monthlyBase) * 100)));
 
   return (
-    <div className="flex h-full min-w-0 flex-1 flex-col p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ModeToggle />
-          <ModelSelector autoDetails={latestAutoInfo} />
-        </div>
+    <div className="flex h-full min-w-0 flex-1 flex-col">
+      <div className="mx-auto flex w-full max-w-[900px] items-center justify-between px-4 pb-2 pt-3 md:px-6">
+        <ModeToggle />
+        {latestAutoInfo ? (
+          <div className="text-xs text-zinc-500">
+            Roteado para <span className="text-zinc-300">{latestAutoInfo.model}</span>
+            {latestAutoInfo.taskType ? ` · ${latestAutoInfo.taskType}` : ""}
+          </div>
+        ) : null}
       </div>
       <MediaToolbar
         onGenerateImage={() => {
@@ -343,7 +345,7 @@ export function ChatPanel() {
         }}
       />
 
-      <div ref={scrollRef} className="mb-3 flex-1 space-y-3 overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-950/50 p-3">
+      <div ref={scrollRef} className="mb-3 flex-1 space-y-1 overflow-y-auto">
         {messages.map((m: UIMessage) => {
           const meta = (m.metadata ?? {}) as Record<string, unknown>;
           const generatedImageUrl = typeof meta.generated_image_url === "string" ? meta.generated_image_url : undefined;
@@ -353,7 +355,7 @@ export function ChatPanel() {
           const visionWarning = typeof meta.vision_warning === "string" ? meta.vision_warning : undefined;
           if (m.role === "assistant" && generatedImageUrl && generatedImageModel) {
             return (
-              <div key={m.id} className="flex justify-start">
+              <div key={m.id} className="mx-auto flex w-full max-w-[900px] justify-start px-4 md:px-6">
                 <ImageGenerationCard
                   imageUrl={generatedImageUrl}
                   model={generatedImageModel}
@@ -422,7 +424,8 @@ export function ChatPanel() {
           />
         ) : null}
         {messages.length === 0 ? (
-          <div className="rounded-xl border border-zinc-700 bg-zinc-900/40 p-5 text-center">
+          <div className="mx-auto w-full max-w-[900px] px-4 md:px-6">
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-6 text-center">
             <div className="mb-2 bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-xl font-extrabold text-transparent">
               WARPION
             </div>
@@ -440,20 +443,21 @@ export function ChatPanel() {
                     setLastPrompt(suggestion);
                     sendMessage({ text: suggestion }, { body });
                   }}
-                  className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-left text-xs text-zinc-200 hover:bg-zinc-800"
+                    className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-left text-xs text-zinc-200 transition hover:border-zinc-700 hover:bg-zinc-800"
                 >
                   {suggestion}
                 </button>
               ))}
             </div>
           </div>
+          </div>
         ) : null}
       </div>
       {showScrollToBottom ? (
-        <div className="-mt-1 mb-2 flex justify-end">
+        <div className="-mt-1 mb-2 flex justify-center">
           <button
             onClick={() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })}
-            className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-200 hover:bg-zinc-800"
+            className="rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1 text-xs text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800"
           >
             ↓ Voltar ao fim
           </button>

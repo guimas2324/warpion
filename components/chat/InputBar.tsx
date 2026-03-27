@@ -5,6 +5,7 @@ import type { ChatAttachment } from "@/types/chat";
 import { useChatStore } from "@/stores/chat-store";
 import { useModelStore } from "@/stores/model-store";
 import { VoiceRecorder } from "@/components/chat/VoiceRecorder";
+import { Paperclip, Image as ImageIcon, ArrowUp, Square } from "lucide-react";
 
 const MAX_ATTACHMENT_SIZE_BYTES = 50 * 1024 * 1024;
 const MAX_ATTACHMENTS_PER_MESSAGE = 5;
@@ -182,8 +183,8 @@ export function InputBar({
   }, []);
 
   return (
-    <form onSubmit={submit} className="flex gap-2">
-      <div className="flex flex-1 flex-col gap-2">
+    <form onSubmit={submit} className="mx-auto w-full max-w-[900px] px-4 pb-4 md:px-6">
+      <div className="flex flex-col gap-2 rounded-2xl border border-zinc-800 bg-zinc-900 p-3 shadow-[0_0_0_1px_rgba(39,39,42,0.35)]">
         {!!attachments.length && (
           <div className="space-y-2">
             {attachments.map((a) => (
@@ -233,7 +234,7 @@ export function InputBar({
           value={value}
           onChange={(e) => onTextareaChange(e.target.value)}
           onKeyDown={onTextareaKeyDown}
-          className="min-h-11 w-full resize-none overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"
+          className="min-h-11 w-full resize-none overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-600"
           placeholder={placeholder}
         />
         {charCount > 500 ? (
@@ -253,44 +254,66 @@ export function InputBar({
               : `${selectedModel?.display_name ?? "Modelo"} (${modelMultiplier.toFixed(1)}x)`}
           </div>
         ) : null}
+        <div className="mt-1 flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <label
+              aria-label="Anexar arquivos"
+              title="Anexar arquivos"
+              className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
+            >
+              <Paperclip className="h-4 w-4" />
+              <input
+                type="file"
+                className="hidden"
+                multiple
+                onChange={onFileChange}
+                accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,text/markdown,text/csv,application/json,.py,.js,.ts,.xlsx,.docx"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                setValue((prev) => (prev.trim() ? prev : "/image "));
+                requestAnimationFrame(() => textareaRef.current?.focus());
+              }}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
+              aria-label="Gerar imagem"
+              title="Gerar imagem"
+            >
+              <ImageIcon className="h-4 w-4" />
+            </button>
+            <VoiceRecorder
+              onTranscribed={(text) => {
+                setValue((prev) => (prev ? `${prev}\n${text}` : text));
+                requestAnimationFrame(resizeTextarea);
+                textareaRef.current?.focus();
+              }}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            {isStreaming ? (
+              <button
+                type="button"
+                onClick={onStop}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-red-500/60 text-red-300 transition hover:bg-red-500/10"
+                title="Parar geração"
+                aria-label="Parar geração"
+              >
+                <Square className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+            <button
+              type="submit"
+              disabled={disabled || uploading || isStreaming || !value.trim()}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-indigo-600 text-white shadow-[0_8px_30px_rgba(99,102,241,0.35)] transition hover:bg-indigo-500 disabled:opacity-30"
+              title={uploading ? "Enviando..." : "Enviar"}
+              aria-label={uploading ? "Enviando..." : "Enviar"}
+            >
+              <ArrowUp className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
       </div>
-      <label
-        aria-label="Anexar arquivos"
-        title="Anexar arquivos"
-        className="inline-flex h-11 cursor-pointer items-center rounded-xl border border-zinc-700 px-3 text-sm text-zinc-200 hover:bg-zinc-900/50"
-      >
-        📎
-        <input
-          type="file"
-          className="hidden"
-          multiple
-          onChange={onFileChange}
-          accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,text/markdown,text/csv,application/json,.py,.js,.ts,.xlsx,.docx"
-        />
-      </label>
-      <VoiceRecorder
-        onTranscribed={(text) => {
-          setValue((prev) => (prev ? `${prev}\n${text}` : text));
-          requestAnimationFrame(resizeTextarea);
-          textareaRef.current?.focus();
-        }}
-      />
-      {isStreaming ? (
-        <button
-          type="button"
-          onClick={onStop}
-          className="h-11 rounded-xl border border-red-500/60 px-3 text-sm font-medium text-red-300 hover:bg-red-500/10"
-        >
-          Stop
-        </button>
-      ) : null}
-      <button
-        type="submit"
-        disabled={disabled || uploading || isStreaming}
-        className="h-11 rounded-xl bg-indigo-600 px-4 text-sm font-medium text-white disabled:opacity-60"
-      >
-        {uploading ? "Uploading..." : "Send"}
-      </button>
     </form>
   );
 }

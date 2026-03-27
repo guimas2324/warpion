@@ -3,6 +3,7 @@
 import { MarkdownRenderer } from "@/components/shared/MarkdownRenderer";
 import type { ChatAttachment } from "@/types/chat";
 import { AudioPlayer } from "@/components/chat/AudioPlayer";
+import { Copy, RefreshCw, Volume2, ThumbsUp, ThumbsDown, FileText } from "lucide-react";
 
 export function MessageBubble({
   role,
@@ -33,108 +34,107 @@ export function MessageBubble({
 }) {
   const isUser = role === "user";
   const providerLabel = provider?.toUpperCase() ?? "WARPION";
-  const userInitials = "U";
-  const providerInitials = providerLabel.slice(0, 2);
 
   return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"} items-end gap-2`}>
-      {!isUser ? (
-        <div className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-xs font-semibold text-indigo-300">
-          {providerInitials}
-        </div>
-      ) : null}
-      <div
-        className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
-          isUser
-            ? "bg-zinc-800 text-zinc-100"
-            : "border border-zinc-700 bg-zinc-950 text-zinc-100"
-        }`}
-      >
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="rounded-full bg-zinc-700 px-2 py-0.5 text-[10px] uppercase tracking-wide text-zinc-100">
-              {isUser ? `USER ${userInitials}` : providerLabel}
-            </span>
-            {!isUser && model ? (
-              <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-[10px] uppercase tracking-wide text-indigo-200">
-                {model}
-              </span>
-            ) : null}
-            {!isUser && typeof tokens === "number" ? (
-              <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-200">
-                {tokens.toLocaleString()} tokens
-              </span>
-            ) : null}
+    <article className="group w-full py-6">
+      <div className="mx-auto max-w-[900px] px-4 md:px-6">
+        {isUser ? (
+          <div className="flex justify-end">
+            <div className="max-w-[780px] text-right text-[15px] leading-7 text-zinc-200">{content}</div>
           </div>
-        </div>
-
-        {isUser ? <div className="whitespace-pre-wrap">{content}</div> : <MarkdownRenderer content={content} />}
-        {!!attachments?.length && (
-          <div className="mt-2 space-y-2 text-xs text-zinc-300">
-            {attachments.map((a) => (
-              <div key={a.path}>
-                {a.mimeType.startsWith("image/") && a.publicUrl ? (
-                  <a href={a.publicUrl} target="_blank" rel="noreferrer" className="inline-block">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={a.publicUrl}
-                      alt={a.name}
-                      className="max-h-[320px] max-w-[400px] rounded-lg border border-zinc-700 object-contain"
-                    />
-                  </a>
-                ) : (
-                  <a
-                    href={a.publicUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900/50 px-2 py-1 underline underline-offset-2 hover:text-indigo-300"
-                  >
-                    <span>📄</span>
-                    <span className="truncate">{a.name}</span>
-                  </a>
-                )}
-              </div>
-            ))}
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-500">
+              <span>{providerLabel}</span>
+              {model ? <span>· {model}</span> : null}
+            </div>
+            <div className="max-w-[780px] text-[15px] leading-7 text-zinc-200">
+              <MarkdownRenderer content={content} />
+            </div>
           </div>
         )}
+
+        {!!attachments?.length ? (
+          <div className={`mt-3 space-y-2 ${isUser ? "flex flex-col items-end" : ""}`}>
+            {attachments.map((a) =>
+              a.mimeType.startsWith("image/") && a.publicUrl ? (
+                <a key={a.path} href={a.publicUrl} target="_blank" rel="noreferrer" className="inline-block">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={a.publicUrl}
+                    alt={a.name}
+                    className="max-h-[320px] max-w-[480px] rounded-xl border border-zinc-800 object-contain"
+                  />
+                </a>
+              ) : (
+                <a
+                  key={a.path}
+                  href={a.publicUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/70 px-3 py-2 text-xs text-zinc-300 transition hover:border-zinc-700 hover:text-zinc-100"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  <span className="truncate">{a.name}</span>
+                </a>
+              ),
+            )}
+          </div>
+        ) : null}
+
         {!isUser && thinkingPhase ? (
-          <div className="mt-2 rounded-lg border border-zinc-700 bg-zinc-900/50 px-2 py-1 text-xs text-zinc-300">
+          <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-900/60 px-2.5 py-1 text-xs text-zinc-400">
             {thinkingPhase}
           </div>
         ) : null}
+
         {!isUser && typeof tokensInput === "number" && typeof tokensOutput === "number" ? (
-          <div className="mt-2 text-[11px] text-zinc-400">
+          <div className="mt-4 text-[11px] text-zinc-500">
             ↑{tokensInput.toLocaleString("pt-BR")} ↓{tokensOutput.toLocaleString("pt-BR")} tokens
+            {typeof tokens === "number" ? ` • total ${tokens.toLocaleString("pt-BR")}` : ""}
             {model ? ` • via ${model}` : ""}
           </div>
         ) : null}
+
         {!isUser && audioUrl ? <AudioPlayer url={audioUrl} /> : null}
+
         {!isUser && (
-          <div className="mt-3 flex gap-2 text-xs">
-            <button onClick={() => navigator.clipboard.writeText(content)} className="rounded border border-zinc-600 px-2 py-0.5 hover:bg-zinc-800">
+          <div className="mt-3 flex items-center gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+            <button
+              onClick={() => navigator.clipboard.writeText(content)}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300"
+            >
+              <Copy className="h-3.5 w-3.5" />
               Copy
             </button>
             {onRegenerate ? (
-              <button onClick={onRegenerate} className="rounded border border-zinc-600 px-2 py-0.5 hover:bg-zinc-800">
+              <button
+                onClick={onRegenerate}
+                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
                 Regenerate
               </button>
             ) : null}
             {onSpeak ? (
-              <button onClick={onSpeak} className="rounded border border-zinc-600 px-2 py-0.5 hover:bg-zinc-800">
-                🔊 Ouvir
+              <button
+                onClick={onSpeak}
+                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300"
+              >
+                <Volume2 className="h-3.5 w-3.5" />
+                Ouvir
               </button>
             ) : null}
-            <button className="rounded border border-zinc-600 px-2 py-0.5 hover:bg-zinc-800">👍</button>
-            <button className="rounded border border-zinc-600 px-2 py-0.5 hover:bg-zinc-800">👎</button>
+            <button className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300">
+              <ThumbsUp className="h-3.5 w-3.5" />
+            </button>
+            <button className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300">
+              <ThumbsDown className="h-3.5 w-3.5" />
+            </button>
           </div>
         )}
       </div>
-      {isUser ? (
-        <div className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-600 bg-zinc-700 text-xs font-semibold text-zinc-100">
-          {userInitials}
-        </div>
-      ) : null}
-    </div>
+    </article>
   );
 }
 
