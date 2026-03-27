@@ -20,19 +20,19 @@ export function Header({ userEmail }: { userEmail: string }) {
   }
 
   return (
-    <header className="flex items-center justify-between rounded-2xl border border-zinc-200 bg-white px-4 py-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+    <header className="flex items-center justify-between rounded-2xl border border-zinc-700 bg-[var(--card)] px-4 py-3 shadow-sm">
       <div className="min-w-0">
-        <div className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">Chat Otimizado</div>
+        <div className="truncate text-sm font-medium text-zinc-100">Chat Otimizado</div>
         <div className="truncate text-xs text-zinc-500">{userEmail}</div>
       </div>
       <div className="flex items-center gap-2">
-        <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-medium text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
+        <div className="rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs font-medium text-zinc-200">
           Tokens: {tokensRemaining.toLocaleString()}
         </div>
         <button
           disabled={loading}
           onClick={signOut}
-          className="h-9 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-800 dark:bg-black dark:text-zinc-200 dark:hover:bg-zinc-900/50"
+          className="h-9 rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm font-medium text-zinc-200 hover:bg-zinc-900/50 disabled:opacity-60"
         >
           {loading ? "Signing out..." : "Sign out"}
         </button>

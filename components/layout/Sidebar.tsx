@@ -45,10 +45,12 @@ export function Sidebar() {
   }, [conversations]);
 
   return (
-    <aside className="w-[280px] shrink-0 rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+    <aside className="w-[280px] shrink-0 rounded-2xl border border-zinc-700 bg-[var(--card)] p-3 shadow-sm">
       <div className="px-2 py-3">
-        <div className="text-xs font-semibold tracking-wide text-zinc-500">WARPION</div>
-        <div className="text-lg font-semibold tracking-tight">Workspace</div>
+        <div className="text-xs font-semibold tracking-wide text-zinc-500">PLATFORM</div>
+        <div className="text-lg font-extrabold tracking-tight">
+          <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">WARPION</span>
+        </div>
       </div>
 
       <nav className="mt-2 space-y-1">
@@ -61,8 +63,8 @@ export function Sidebar() {
               className={[
                 "flex items-center justify-between rounded-xl px-3 py-2 text-sm transition-colors",
                 active
-                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                  : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900/50",
+                  ? "bg-indigo-600 text-white"
+                  : "text-zinc-300 hover:bg-zinc-900/50",
               ].join(" ")}
             >
               <span className="font-medium">{item.label}</span>
@@ -71,8 +73,8 @@ export function Sidebar() {
                   className={[
                     "rounded-full px-2 py-0.5 text-[11px] font-semibold",
                     active
-                      ? "bg-white/15 text-white dark:bg-black/10 dark:text-zinc-900"
-                      : "bg-zinc-100 text-zinc-700 dark:bg-zinc-900 dark:text-zinc-200",
+                      ? "bg-white/15 text-white"
+                      : "bg-zinc-900 text-zinc-200",
                   ].join(" ")}
                 >
                   Beta
@@ -83,12 +85,12 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+      <div className="mt-4 border-t border-zinc-700 pt-3">
         <div className="mb-2 flex items-center justify-between px-2">
           <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Historico</div>
           <button
             onClick={() => setSelectedConversationId(undefined)}
-            className="rounded-md border border-zinc-200 px-2 py-0.5 text-xs hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900/50"
+            className="rounded-md border border-zinc-700 px-2 py-0.5 text-xs hover:bg-zinc-900/50"
           >
             Nova
           </button>
@@ -106,8 +108,8 @@ export function Sidebar() {
                       className={[
                         "w-full truncate rounded-lg px-2 py-1.5 text-left text-sm",
                         selectedConversationId === conv.id
-                          ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                          : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900/50",
+                          ? "bg-indigo-600 text-white"
+                          : "text-zinc-300 hover:bg-zinc-900/50",
                       ].join(" ")}
                     >
                       {conv.title}
