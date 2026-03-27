@@ -1,13 +1,17 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-export function middleware(request: NextRequest) {
-  const token = request.cookies.get('sb-iaolheyyewciibkqlyzq-auth-token')
-  const isAuthPage = request.nextUrl.pathname.startsWith('/login') || 
-                     request.nextUrl.pathname.startsWith('/register')
-  const isApiRoute = request.nextUrl.pathname.startsWith('/api')
+const PUBLIC_PATHS = ['/', '/pricing', '/privacy', '/terms']
 
-  if (!token && !isAuthPage && !isApiRoute) {
+export function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
+  const token = request.cookies.get('sb-iaolheyyewciibkqlyzq-auth-token')
+  const isAuthPage = pathname.startsWith('/login') ||
+                     pathname.startsWith('/register')
+  const isApiRoute = pathname.startsWith('/api')
+  const isPublicPage = PUBLIC_PATHS.includes(pathname)
+
+  if (!token && !isAuthPage && !isApiRoute && !isPublicPage) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
