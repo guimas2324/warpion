@@ -1,3 +1,5 @@
+import { ScrollSection } from "@/components/public/ScrollSection";
+
 const TESTIMONIALS = [
   {
     quote: "O Intelligence Engine transformou minha produtividade no dia a dia.",
@@ -22,12 +24,12 @@ const METRICS = [
 
 export function SocialProofSection() {
   return (
-    <section className="px-4 py-14 md:px-6">
+    <ScrollSection className="px-4 py-14 md:px-6">
       <div className="mx-auto w-full max-w-6xl">
-        <h2 className="text-center text-3xl font-bold tracking-tight text-zinc-100 md:text-4xl">
+        <h2 className="animate-on-scroll text-center text-3xl font-bold tracking-tight text-zinc-100 md:text-4xl">
           Resultados que convencem
         </h2>
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
+        <div className="stagger-children mt-6 grid gap-4 md:grid-cols-3">
           {TESTIMONIALS.map((item) => (
             <blockquote key={item.author} className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
               <p className="text-sm text-zinc-300">“{item.quote}”</p>
@@ -35,7 +37,7 @@ export function SocialProofSection() {
             </blockquote>
           ))}
         </div>
-        <div className="mt-8 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+        <div className="stagger-children mt-8 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
           {METRICS.map((item) => (
             <div key={item.label} className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 text-center">
               <div className="text-2xl font-bold text-zinc-100">{item.value}</div>
@@ -44,6 +46,6 @@ export function SocialProofSection() {
           ))}
         </div>
       </div>
-    </section>
+    </ScrollSection>
   );
 }

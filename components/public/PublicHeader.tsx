@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Menu, X } from "lucide-react";
 
 export function PublicHeader() {
   const [open, setOpen] = useState(false);
@@ -26,7 +27,7 @@ export function PublicHeader() {
     >
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 md:px-6">
         <Link href="/" className="flex items-center gap-2">
-          <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-indigo-500 to-violet-500 text-sm font-bold text-white">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-gradient-to-br from-indigo-500 to-violet-500 text-sm font-bold text-white">
             W
           </span>
           <span className="text-sm font-bold tracking-wide text-zinc-100">WARPION</span>
@@ -55,10 +56,10 @@ export function PublicHeader() {
         </div>
         <button
           aria-label="Abrir menu"
-          className="rounded-lg border border-zinc-700 px-2 py-1 text-sm text-zinc-200 md:hidden"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-700 text-zinc-200 md:hidden"
           onClick={() => setOpen((v) => !v)}
         >
-          ☰
+          {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
         </button>
       </div>
       {open ? (
