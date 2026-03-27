@@ -49,6 +49,26 @@ function normalizeHistory(rawHistory: unknown): UiChatMessage[] {
     .filter((item): item is UiChatMessage => item !== null);
 }
 
+function toChatStreamResponse(
+  streamResult: {
+    toUIMessageStreamResponse?: (options?: { headers?: HeadersInit }) => Response;
+    toDataStreamResponse?: (options?: { headers?: HeadersInit }) => Response;
+    toTextStreamResponse?: (options?: { headers?: HeadersInit }) => Response;
+  },
+  headers: HeadersInit,
+) {
+  if (typeof streamResult.toUIMessageStreamResponse === "function") {
+    return streamResult.toUIMessageStreamResponse({ headers });
+  }
+  if (typeof streamResult.toDataStreamResponse === "function") {
+    return streamResult.toDataStreamResponse({ headers });
+  }
+  if (typeof streamResult.toTextStreamResponse === "function") {
+    return streamResult.toTextStreamResponse({ headers });
+  }
+  throw new Error("No compatible stream response method found on streamText result.");
+}
+
 async function generateConversationTitle(params: {
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   message: string;
@@ -229,13 +249,11 @@ export async function POST(request: Request) {
       },
     });
 
-    return engine.streamResult.toUIMessageStreamResponse({
-      headers: {
-        "x-conversation-id": conversationId ?? "",
-        "x-selected-model": engine.selectedModelId,
-        "x-selected-task": engine.taskType,
-        "x-intent-reasoning": engine.intentReasoning,
-      },
+    return toChatStreamResponse(engine.streamResult, {
+      "x-conversation-id": conversationId ?? "",
+      "x-selected-model": engine.selectedModelId,
+      "x-selected-task": engine.taskType,
+      "x-intent-reasoning": engine.intentReasoning,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Chat request failed";

@@ -49,15 +49,28 @@ async function resolveMappedModelId(supabase: SupabaseClient, taskType: TaskType
   return mapped[0];
 }
 
+async function modelExists(supabase: SupabaseClient, modelId: string) {
+  const { data, error } = await supabase
+    .from("model_catalog")
+    .select("id")
+    .eq("id", modelId)
+    .eq("is_active", true)
+    .eq("model_type", "text")
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data?.id);
+}
+
 async function resolveModelRow(supabase: SupabaseClient, modelId: string) {
   const { data, error } = await supabase
     .from("model_catalog")
-    .select("id, provider, display_name")
+    .select("id, provider, display_name, model_type")
     .eq("id", modelId)
     .eq("is_active", true)
+    .eq("model_type", "text")
     .single();
   if (error || !data) throw error ?? new Error("Model not found");
-  return data as { id: string; provider: string; display_name: string };
+  return data as { id: string; provider: string; display_name: string; model_type: string };
 }
 
 export async function processWithIntelligenceEngine(params: ProcessParams): Promise<EngineResult> {
@@ -86,10 +99,22 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
     throw new Error("Pedido ambiguo no modo auto. Especifique melhor o objetivo para continuar.");
   }
 
-  const selectedModelId =
-    mode === "manual"
-      ? modelId
-      : intent.recommended_model || (await resolveMappedModelId(supabase, intent.task_type));
+  let selectedModelId: string | undefined;
+
+  if (mode === "manual" && modelId) {
+    selectedModelId = modelId;
+  } else {
+    const candidateId = intent.recommended_model;
+    if (candidateId && (await modelExists(supabase, candidateId))) {
+      selectedModelId = candidateId;
+    }
+    if (!selectedModelId) {
+      selectedModelId = await resolveMappedModelId(supabase, intent.task_type);
+    }
+    if (!selectedModelId) {
+      selectedModelId = "gemini-3-flash";
+    }
+  }
 
   if (!selectedModelId) {
     throw new Error("Nao foi possivel selecionar um modelo para esta tarefa.");

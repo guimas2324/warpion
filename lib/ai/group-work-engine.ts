@@ -8,7 +8,6 @@ export type GroupWorkAgent = {
   role: string;
   modelId: string;
   provider: string;
-  apiKey?: string;
 };
 
 export type GroupWorkPhase = {
@@ -26,7 +25,7 @@ export async function runGroupWorkPhase(params: {
   accumulatedContext: string;
 }) {
   const { phase, conversationId, userId, accumulatedContext } = params;
-  const model = getProviderModel(phase.agent.provider, phase.agent.modelId, phase.agent.apiKey);
+  const model = getProviderModel(phase.agent.provider, phase.agent.modelId);
 
   const abort = new AbortController();
   const timeout = setTimeout(() => abort.abort("timeout"), 120_000);

@@ -55,7 +55,7 @@ export async function decodeIntent(params: {
       task_type: heuristicTask,
       complexity: message.length > 1200 ? 4 : 2,
       ambiguous: mode === "auto" && message.trim().length < 12,
-      recommended_model: selectedModelId ?? "gpt-5.2",
+      recommended_model: selectedModelId ?? "gemini-3-flash",
       reasoning: "Fallback heuristic path used because no cheap model is active.",
     };
   }
@@ -91,9 +91,9 @@ export async function decodeIntent(params: {
     return {
       task_type: heuristicTask,
       complexity: message.length > 1200 ? 4 : 2,
-      ambiguous: mode === "auto" && message.trim().length < 12,
-      recommended_model: selectedModelId ?? cheap.id,
-      reasoning: "Fallback heuristic path used due to decoder failure.",
+      ambiguous: false,
+      recommended_model: selectedModelId ?? cheap?.id ?? "gemini-3-flash",
+      reasoning: "Fallback: decoder failed, using heuristic + safe default model.",
     };
   }
 }
