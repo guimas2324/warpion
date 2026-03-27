@@ -13,7 +13,9 @@ export async function GET() {
 
     const { data: profile, error } = await supabase
       .from("profiles")
-      .select("full_name, email, avatar_url, tokens_remaining, tokens_used_total, plan_id")
+      .select(
+        "full_name, email, avatar_url, tokens_remaining, tokens_used_total, plan_id, plans!inner(name, display_name, tokens_monthly, price_cents)",
+      )
       .eq("id", user.id)
       .single();
     if (error) throw error;
