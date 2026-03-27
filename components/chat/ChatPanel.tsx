@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { ModeToggle } from "@/components/chat/ModeToggle";
@@ -50,12 +50,15 @@ export function ChatPanel() {
   const mode = useChatStore((s) => s.mode);
   const modelId = useChatStore((s) => s.modelId);
   const selectedConversationId = useChatStore((s) => s.selectedConversationId);
+  const setSelectedConversationId = useChatStore((s) => s.setSelectedConversationId);
   const setConversations = useChatStore((s) => s.setConversations);
   const tokensRemaining = useChatStore((s) => s.tokensRemaining);
   const setTokensRemaining = useChatStore((s) => s.setTokensRemaining);
   const setModels = useModelStore((s) => s.setModels);
   const [lastPrompt, setLastPrompt] = useState<string>("");
   const [error, setError] = useState<string>("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
   const body = useMemo(
     () => ({
@@ -153,6 +156,42 @@ export function ChatPanel() {
     void refreshConversations();
   }, [messages.length, setConversations, status]);
 
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node) return;
+    const nearBottom = node.scrollHeight - node.scrollTop - node.clientHeight < 80;
+    if (nearBottom || status === "streaming" || status === "submitted") {
+      node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
+    }
+  }, [messages, status]);
+
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node) return;
+    const onScroll = () => {
+      const distance = node.scrollHeight - node.scrollTop - node.clientHeight;
+      setShowScrollToBottom(distance > 140);
+    };
+    node.addEventListener("scroll", onScroll);
+    onScroll();
+    return () => node.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        setSelectedConversationId(undefined);
+        setMessages([]);
+      }
+      if (event.key === "Escape") {
+        stop();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [setMessages, setSelectedConversationId, stop]);
+
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col p-4">
       <div className="mb-3 flex items-center justify-between">
@@ -162,7 +201,7 @@ export function ChatPanel() {
         </div>
       </div>
 
-      <div className="mb-3 flex-1 space-y-3 overflow-y-auto rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-black">
+      <div ref={scrollRef} className="mb-3 flex-1 space-y-3 overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-950/50 p-3">
         {messages.map((m: UIMessage) => {
           const meta = (m.metadata ?? {}) as Record<string, unknown>;
           return (
@@ -190,8 +229,44 @@ export function ChatPanel() {
             thinkingPhase={status === "submitted" ? "Analisando..." : `${mode === "manual" ? modelId : "Warpion"} gerando...`}
           />
         ) : null}
-        {messages.length === 0 ? <div className="text-sm text-zinc-500">Start a conversation...</div> : null}
+        {messages.length === 0 ? (
+          <div className="rounded-xl border border-zinc-700 bg-zinc-900/40 p-5 text-center">
+            <div className="mb-2 bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-xl font-extrabold text-transparent">
+              WARPION
+            </div>
+            <div className="mb-4 text-sm text-zinc-400">Como posso ajudar?</div>
+            <div className="grid gap-2 md:grid-cols-2">
+              {[
+                "Refatore este trecho TypeScript com foco em performance",
+                "Crie um plano de execucao para uma API em 3 fases",
+                "Analise estes requisitos e aponte riscos tecnicos",
+                "Escreva um resumo executivo em portugues",
+              ].map((suggestion) => (
+                <button
+                  key={suggestion}
+                  onClick={() => {
+                    setLastPrompt(suggestion);
+                    sendMessage({ text: suggestion }, { body });
+                  }}
+                  className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-left text-xs text-zinc-200 hover:bg-zinc-800"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
+      {showScrollToBottom ? (
+        <div className="-mt-1 mb-2 flex justify-end">
+          <button
+            onClick={() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })}
+            className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-200 hover:bg-zinc-800"
+          >
+            ↓ Voltar ao fim
+          </button>
+        </div>
+      ) : null}
       {error ? <div className="mb-2 text-sm text-red-500">{error}</div> : null}
 
       <InputBar

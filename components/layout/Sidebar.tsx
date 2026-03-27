@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useChatStore } from "@/stores/chat-store";
 
 const NAV = [
@@ -15,6 +15,7 @@ const NAV = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
   const conversations = useChatStore((s) => s.conversations);
   const selectedConversationId = useChatStore((s) => s.selectedConversationId);
   const setSelectedConversationId = useChatStore((s) => s.setSelectedConversationId);
@@ -44,8 +45,8 @@ export function Sidebar() {
     return bucket;
   }, [conversations]);
 
-  return (
-    <aside className="w-[280px] shrink-0 rounded-2xl border border-zinc-700 bg-[var(--card)] p-3 shadow-sm">
+  const sidebarContent = (
+    <>
       <div className="px-2 py-3">
         <div className="text-xs font-semibold tracking-wide text-zinc-500">PLATFORM</div>
         <div className="text-lg font-extrabold tracking-tight">
@@ -60,6 +61,7 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
+              onClick={() => setMobileOpen(false)}
               className={[
                 "flex items-center justify-between rounded-xl px-3 py-2 text-sm transition-colors",
                 active
@@ -104,7 +106,10 @@ export function Sidebar() {
                   {items.map((conv) => (
                     <button
                       key={conv.id}
-                      onClick={() => setSelectedConversationId(conv.id)}
+                      onClick={() => {
+                        setSelectedConversationId(conv.id);
+                        setMobileOpen(false);
+                      }}
                       className={[
                         "w-full truncate rounded-lg px-2 py-1.5 text-left text-sm",
                         selectedConversationId === conv.id
@@ -121,7 +126,39 @@ export function Sidebar() {
           )}
         </div>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      <button
+        onClick={() => setMobileOpen(true)}
+        className="fixed left-3 top-3 z-40 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 md:hidden"
+      >
+        ☰
+      </button>
+
+      <aside className="hidden w-[280px] shrink-0 rounded-2xl border border-zinc-700 bg-[var(--card)] p-3 shadow-sm md:block">
+        {sidebarContent}
+      </aside>
+
+      {mobileOpen ? (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/50 md:hidden" onClick={() => setMobileOpen(false)} />
+          <aside className="fixed left-0 top-0 z-50 h-full w-[280px] overflow-y-auto border-r border-zinc-700 bg-[var(--card)] p-3 md:hidden">
+            <div className="mb-2 flex justify-end">
+              <button
+                onClick={() => setMobileOpen(false)}
+                className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-200"
+              >
+                Fechar
+              </button>
+            </div>
+            {sidebarContent}
+          </aside>
+        </>
+      ) : null}
+    </>
   );
 }
 
