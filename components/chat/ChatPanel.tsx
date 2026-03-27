@@ -142,6 +142,17 @@ export function ChatPanel() {
     void loadConversationMessages();
   }, [selectedConversationId, setMessages]);
 
+  useEffect(() => {
+    async function refreshConversations() {
+      if (status !== "ready") return;
+      const res = await fetch("/api/conversations");
+      if (!res.ok) return;
+      const json = (await res.json()) as { data: ConversationDTO[] };
+      setConversations(json.data ?? []);
+    }
+    void refreshConversations();
+  }, [messages.length, setConversations, status]);
+
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col p-4">
       <div className="mb-3 flex items-center justify-between">

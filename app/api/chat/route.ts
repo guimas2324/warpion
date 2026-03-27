@@ -4,11 +4,49 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { ChatRequestPayload } from "@/types/chat";
 import { processWithIntelligenceEngine } from "@/lib/ai/intelligence-engine";
+import { generateText } from "ai";
+import { getProviderModel } from "@/lib/ai/providers";
 
 function getClientIp(request: Request) {
   const header = request.headers.get("x-forwarded-for");
   if (!header) return null;
   return header.split(",")[0]?.trim() || null;
+}
+
+async function generateConversationTitle(params: {
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
+  message: string;
+}) {
+  const { supabase, message } = params;
+  const cheapModelIds = ["claude-haiku-4-5", "gemini-3-flash", "deepseek-v3.2"];
+  const { data: models } = await supabase
+    .from("model_catalog")
+    .select("id, provider")
+    .in("id", cheapModelIds)
+    .eq("is_active", true);
+
+  const picked = cheapModelIds
+    .map((id) => (models ?? []).find((m) => m.id === id))
+    .find(Boolean) as { id: string; provider: string } | undefined;
+
+  if (!picked) return message.split("\n")[0].slice(0, 60);
+  const model = getProviderModel(picked.provider, picked.id);
+
+  try {
+    const result = await generateText({
+      model,
+      prompt: [
+        "Gere um titulo curto em portugues para a conversa.",
+        "Regra: maximo 6 palavras, sem aspas, sem ponto final.",
+        `Mensagem inicial: ${message}`,
+      ].join("\n"),
+      maxOutputTokens: 24,
+    });
+    const title = result.text.trim().replace(/^["']|["']$/g, "");
+    return title.slice(0, 80) || message.split("\n")[0].slice(0, 60);
+  } catch {
+    return message.split("\n")[0].slice(0, 60);
+  }
 }
 
 export async function POST(request: Request) {
@@ -51,8 +89,9 @@ export async function POST(request: Request) {
       return new Response(JSON.stringify({ data: null, error: "Rate limit exceeded", meta: {} }), { status: 429 });
     }
 
+    const isFirstMessage = !body.conversation_id;
     let conversationId = body.conversation_id;
-    if (!body.conversation_id) {
+    if (isFirstMessage) {
       const { data: createdConv, error: convError } = await supabase
         .from("conversations")
         .insert({
@@ -115,6 +154,14 @@ export async function POST(request: Request) {
             updated_at: new Date().toISOString(),
           })
           .eq("id", conversationId);
+
+        if (isFirstMessage) {
+          const title = await generateConversationTitle({ supabase, message });
+          await supabase
+            .from("conversations")
+            .update({ title })
+            .eq("id", conversationId);
+        }
       },
     });
 
