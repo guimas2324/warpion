@@ -121,7 +121,13 @@ export async function POST(request: Request) {
   if (!user) return new Response(JSON.stringify({ data: null, error: "Unauthorized", meta: {} }), { status: 401 });
 
   try {
-    const admin = createSupabaseAdminClient();
+    let admin: ReturnType<typeof createSupabaseAdminClient> | null = null;
+    try {
+      admin = createSupabaseAdminClient();
+    } catch (adminError) {
+      console.error("Admin client unavailable in /api/chat, continuing without private RPCs:", adminError);
+      admin = null;
+    }
     const raw = (await request.json()) as {
       message?: unknown;
       messages?: unknown;
@@ -167,21 +173,23 @@ export async function POST(request: Request) {
     const clientIp = getClientIp(request);
     const userAgent = request.headers.get("user-agent");
     let allowed = true;
-    const { data: rateData, error: rateError } = await admin
-      .schema("private")
-      .rpc("check_rate_limit", {
-        user_id: user.id,
-        ip: clientIp ?? "0.0.0.0",
-        endpoint: "/api/chat",
-        max_requests: 120,
-        window_minutes: 5,
-      });
+    if (admin) {
+      const { data: rateData, error: rateError } = await admin
+        .schema("private")
+        .rpc("check_rate_limit", {
+          user_id: user.id,
+          ip: clientIp ?? "0.0.0.0",
+          endpoint: "/api/chat",
+          max_requests: 120,
+          window_minutes: 5,
+        });
 
-    if (rateError) {
-      console.error("check_rate_limit failed, allowing request:", rateError);
-      allowed = true;
-    } else {
-      allowed = Boolean(rateData);
+      if (rateError) {
+        console.error("check_rate_limit failed, allowing request:", rateError);
+        allowed = true;
+      } else {
+        allowed = Boolean(rateData);
+      }
     }
 
     if (!allowed) {

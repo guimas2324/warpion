@@ -130,7 +130,13 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
   });
 
   const model = getProviderModel(modelRow.provider, selectedModelId);
-  const admin = createSupabaseAdminClient();
+  let admin: ReturnType<typeof createSupabaseAdminClient> | null = null;
+  try {
+    admin = createSupabaseAdminClient();
+  } catch (adminError) {
+    console.error("Admin client unavailable in intelligence engine, proceeding without private RPCs:", adminError);
+    admin = null;
+  }
   const modelMessages = [
     ...history.map((m) => ({
       role: m.role as "user" | "assistant" | "system",
@@ -159,23 +165,28 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
         raw_tokens: rawTokens,
       };
       let debitResult: unknown = null;
-      const { data: debitData, error: debitError } = await admin.rpc("debit_tokens", debitPayload);
-      if (debitError) {
-        // Fallback to legacy ledger debit if RPC is unavailable/misconfigured.
-        console.error("debit_tokens RPC failed, falling back to ledger:", debitError);
-        await recordUsageAndDebit({
-          userId,
-          conversationId: conversationId ?? "",
-          modelId: selectedModelId,
-          provider: modelRow.provider,
-          inputTokens: tokens.inputTokens,
-          outputTokens: tokens.outputTokens,
-          toolType,
-          phase: intent.task_type,
-        });
-        debitResult = { success: true, fallback: "recordUsageAndDebit" };
+      if (admin) {
+        const { data: debitData, error: debitError } = await admin.rpc("debit_tokens", debitPayload);
+        if (debitError) {
+          // Fallback to legacy ledger debit if RPC is unavailable/misconfigured.
+          console.error("debit_tokens RPC failed, falling back to ledger:", debitError);
+          await recordUsageAndDebit({
+            userId,
+            conversationId: conversationId ?? "",
+            modelId: selectedModelId,
+            provider: modelRow.provider,
+            inputTokens: tokens.inputTokens,
+            outputTokens: tokens.outputTokens,
+            toolType,
+            phase: intent.task_type,
+          });
+          debitResult = { success: true, fallback: "recordUsageAndDebit" };
+        } else {
+          debitResult = debitData;
+        }
       } else {
-        debitResult = debitData;
+        console.error("Skipping debit_tokens because admin client is unavailable.");
+        debitResult = { success: false, skipped: "admin_unavailable" };
       }
 
       if (persistAssistantMessage) {
@@ -189,24 +200,26 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
         });
       }
 
-      const { error: usageInsertError } = await admin.from("token_usage_log").insert({
-        user_id: userId,
-        conversation_id: conversationId ?? null,
-        model: selectedModelId,
-        provider: modelRow.provider,
-        tokens_input: tokens.inputTokens,
-        tokens_output: tokens.outputTokens,
-        cost_cents: 0,
-        tool_type: toolType,
-        phase: intent.task_type,
-        metadata: {
-          debit_result: debitResult,
-          selected_skills: selectedSkills,
-          intent_reasoning: intent.reasoning,
-        },
-      });
-      if (usageInsertError) {
-        console.error("token_usage_log insert failed:", usageInsertError);
+      if (admin) {
+        const { error: usageInsertError } = await admin.from("token_usage_log").insert({
+          user_id: userId,
+          conversation_id: conversationId ?? null,
+          model: selectedModelId,
+          provider: modelRow.provider,
+          tokens_input: tokens.inputTokens,
+          tokens_output: tokens.outputTokens,
+          cost_cents: 0,
+          tool_type: toolType,
+          phase: intent.task_type,
+          metadata: {
+            debit_result: debitResult,
+            selected_skills: selectedSkills,
+            intent_reasoning: intent.reasoning,
+          },
+        });
+        if (usageInsertError) {
+          console.error("token_usage_log insert failed:", usageInsertError);
+        }
       }
 
       const quality = await runQualityGate({
@@ -229,40 +242,44 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
           ].join("\n"),
         });
 
-        const { error: auditRetryError } = await admin.schema("private").rpc("log_audit", {
+        if (admin) {
+          const { error: auditRetryError } = await admin.schema("private").rpc("log_audit", {
+            user_id: userId,
+            action: "quality_gate_retry",
+            resource_type: "chat_message",
+            resource_id: conversationId ?? null,
+            ip: requestIp ?? null,
+            user_agent: userAgent ?? null,
+            metadata: {
+              quality,
+              improved_preview: improved.text.slice(0, 300),
+            },
+          });
+          if (auditRetryError) {
+            console.error("quality_gate_retry audit failed:", auditRetryError);
+          }
+        }
+      }
+
+      if (admin) {
+        const { error: auditMainError } = await admin.schema("private").rpc("log_audit", {
           user_id: userId,
-          action: "quality_gate_retry",
-          resource_type: "chat_message",
+          action: "intelligence_engine_processed",
+          resource_type: "chat",
           resource_id: conversationId ?? null,
           ip: requestIp ?? null,
           user_agent: userAgent ?? null,
           metadata: {
+            task_type: intent.task_type,
+            model_id: selectedModelId,
+            model_provider: modelRow.provider,
+            selected_skills: selectedSkills,
             quality,
-            improved_preview: improved.text.slice(0, 300),
           },
         });
-        if (auditRetryError) {
-          console.error("quality_gate_retry audit failed:", auditRetryError);
+        if (auditMainError) {
+          console.error("intelligence_engine_processed audit failed:", auditMainError);
         }
-      }
-
-      const { error: auditMainError } = await admin.schema("private").rpc("log_audit", {
-        user_id: userId,
-        action: "intelligence_engine_processed",
-        resource_type: "chat",
-        resource_id: conversationId ?? null,
-        ip: requestIp ?? null,
-        user_agent: userAgent ?? null,
-        metadata: {
-          task_type: intent.task_type,
-          model_id: selectedModelId,
-          model_provider: modelRow.provider,
-          selected_skills: selectedSkills,
-          quality,
-        },
-      });
-      if (auditMainError) {
-        console.error("intelligence_engine_processed audit failed:", auditMainError);
       }
     },
   });
