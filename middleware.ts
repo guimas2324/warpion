@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { updateSession } from "@/lib/supabase/middleware";
+import { updateSession } from "./lib/supabase/middleware";
 
 type CookieToSet = { name: string; value: string; options?: Record<string, unknown> };
 
