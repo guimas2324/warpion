@@ -73,7 +73,7 @@ export function ChatPanel() {
     [body],
   );
 
-  const { messages, sendMessage, setMessages, status } = useChat({
+  const { messages, sendMessage, setMessages, status, stop } = useChat({
     transport,
     onError(err) {
       setError(err.message);
@@ -173,6 +173,11 @@ export function ChatPanel() {
 
       <InputBar
         disabled={status === "streaming" || tokensRemaining <= 0}
+        isStreaming={status === "streaming" || status === "submitted"}
+        mode={mode}
+        onStop={() => {
+          stop();
+        }}
         onSend={(value, attachments) => {
           setLastPrompt(value);
           setError("");
