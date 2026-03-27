@@ -4,8 +4,8 @@ import { PublicFooter } from "@/components/public/PublicFooter";
 import { HeroSection } from "@/components/public/HeroSection";
 import { FeaturesSection } from "@/components/public/FeaturesSection";
 import { EngineSection } from "@/components/public/EngineSection";
-import { ProvidersSection } from "@/components/public/ProvidersSection";
-import { PricingPreviewSection } from "@/components/public/PricingPreviewSection";
+import { ModelsSection } from "@/components/public/ModelsSection";
+import { PricingSection } from "@/components/public/PricingSection";
 import { SocialProofSection } from "@/components/public/SocialProofSection";
 import { FinalCtaSection } from "@/components/public/FinalCtaSection";
 
@@ -22,8 +22,8 @@ export default async function Home() {
         <HeroSection isLoggedIn={Boolean(user)} />
         <FeaturesSection />
         <EngineSection />
-        <ProvidersSection />
-        <PricingPreviewSection />
+        <ModelsSection />
+        <PricingSection />
         <SocialProofSection />
         <FinalCtaSection />
       </main>
