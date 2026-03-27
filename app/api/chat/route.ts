@@ -13,6 +13,14 @@ function getClientIp(request: Request) {
   return header.split(",")[0]?.trim() || null;
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error && "message" in error) {
+    return String((error as { message?: unknown }).message ?? "Chat request failed");
+  }
+  return "Chat request failed";
+}
+
 function extractMessageText(input: unknown) {
   if (typeof input === "string") return input.trim();
   if (Array.isArray(input)) {
@@ -158,17 +166,24 @@ export async function POST(request: Request) {
 
     const clientIp = getClientIp(request);
     const userAgent = request.headers.get("user-agent");
-    const { data: allowed, error: rateError } = await admin
+    let allowed = true;
+    const { data: rateData, error: rateError } = await admin
       .schema("private")
       .rpc("check_rate_limit", {
         user_id: user.id,
-        ip: clientIp,
+        ip: clientIp ?? "0.0.0.0",
         endpoint: "/api/chat",
         max_requests: 120,
         window_minutes: 5,
       });
 
-    if (rateError) throw rateError;
+    if (rateError) {
+      console.error("check_rate_limit failed, allowing request:", rateError);
+      allowed = true;
+    } else {
+      allowed = Boolean(rateData);
+    }
+
     if (!allowed) {
       return new Response(JSON.stringify({ data: null, error: "Rate limit exceeded", meta: {} }), { status: 429 });
     }
@@ -256,7 +271,7 @@ export async function POST(request: Request) {
       "x-intent-reasoning": engine.intentReasoning,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Chat request failed";
+    const message = getErrorMessage(error);
     return new Response(JSON.stringify({ data: null, error: message, meta: {} }), { status: 500 });
   }
 }

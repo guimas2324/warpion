@@ -7,6 +7,7 @@ import { extractTokenUsage } from "@/lib/ai/usage";
 import { buildArchitectedPrompt } from "@/lib/ai/intelligence-engine/prompt-architect";
 import { decodeIntent } from "@/lib/ai/intelligence-engine/intent-decoder";
 import { runQualityGate } from "@/lib/ai/intelligence-engine/quality-gate";
+import { recordUsageAndDebit } from "@/lib/ai/token-ledger";
 
 type ToolType = "chat" | "group_work";
 
@@ -157,8 +158,25 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
         tool_type: toolType,
         raw_tokens: rawTokens,
       };
-      const { data: debitResult, error: debitError } = await admin.rpc("debit_tokens", debitPayload);
-      if (debitError) throw debitError;
+      let debitResult: unknown = null;
+      const { data: debitData, error: debitError } = await admin.rpc("debit_tokens", debitPayload);
+      if (debitError) {
+        // Fallback to legacy ledger debit if RPC is unavailable/misconfigured.
+        console.error("debit_tokens RPC failed, falling back to ledger:", debitError);
+        await recordUsageAndDebit({
+          userId,
+          conversationId: conversationId ?? "",
+          modelId: selectedModelId,
+          provider: modelRow.provider,
+          inputTokens: tokens.inputTokens,
+          outputTokens: tokens.outputTokens,
+          toolType,
+          phase: intent.task_type,
+        });
+        debitResult = { success: true, fallback: "recordUsageAndDebit" };
+      } else {
+        debitResult = debitData;
+      }
 
       if (persistAssistantMessage) {
         await persistAssistantMessage({
@@ -171,7 +189,7 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
         });
       }
 
-      await admin.from("token_usage_log").insert({
+      const { error: usageInsertError } = await admin.from("token_usage_log").insert({
         user_id: userId,
         conversation_id: conversationId ?? null,
         model: selectedModelId,
@@ -187,6 +205,9 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
           intent_reasoning: intent.reasoning,
         },
       });
+      if (usageInsertError) {
+        console.error("token_usage_log insert failed:", usageInsertError);
+      }
 
       const quality = await runQualityGate({
         supabase,
@@ -208,7 +229,7 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
           ].join("\n"),
         });
 
-        await admin.schema("private").rpc("log_audit", {
+        const { error: auditRetryError } = await admin.schema("private").rpc("log_audit", {
           user_id: userId,
           action: "quality_gate_retry",
           resource_type: "chat_message",
@@ -220,9 +241,12 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
             improved_preview: improved.text.slice(0, 300),
           },
         });
+        if (auditRetryError) {
+          console.error("quality_gate_retry audit failed:", auditRetryError);
+        }
       }
 
-      await admin.schema("private").rpc("log_audit", {
+      const { error: auditMainError } = await admin.schema("private").rpc("log_audit", {
         user_id: userId,
         action: "intelligence_engine_processed",
         resource_type: "chat",
@@ -237,6 +261,9 @@ export async function processWithIntelligenceEngine(params: ProcessParams): Prom
           quality,
         },
       });
+      if (auditMainError) {
+        console.error("intelligence_engine_processed audit failed:", auditMainError);
+      }
     },
   });
 
