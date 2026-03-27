@@ -26,7 +26,7 @@ type ModelDTO = {
   supports_tools: boolean | null;
   speed_tier: "fast" | "normal" | "slow" | null;
 };
-type ProfileDTO = { tokens_remaining: number };
+type ProfileDTO = { tokens_remaining: number; tokens_used_total?: number };
 type ConversationMessageDTO = {
   id: string;
   role: "user" | "assistant" | "system";
@@ -54,6 +54,7 @@ export function ChatPanel() {
   const setConversations = useChatStore((s) => s.setConversations);
   const tokensRemaining = useChatStore((s) => s.tokensRemaining);
   const setTokensRemaining = useChatStore((s) => s.setTokensRemaining);
+  const setTokensUsedTotal = useChatStore((s) => s.setTokensUsedTotal);
   const setModels = useModelStore((s) => s.setModels);
   const [lastPrompt, setLastPrompt] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -113,10 +114,11 @@ export function ChatPanel() {
       if (profileRes.ok) {
         const json = (await profileRes.json()) as { data: ProfileDTO };
         setTokensRemaining(Number(json.data?.tokens_remaining ?? 0));
+        setTokensUsedTotal(Number(json.data?.tokens_used_total ?? 0));
       }
     }
     void load();
-  }, [setConversations, setModels, setTokensRemaining]);
+  }, [setConversations, setModels, setTokensRemaining, setTokensUsedTotal]);
 
   useEffect(() => {
     async function loadConversationMessages() {
@@ -282,7 +284,7 @@ export function ChatPanel() {
           sendMessage({ text: value }, { body: { ...body, attachments } });
         }}
       />
-      {tokensRemaining <= 0 ? <div className="mt-2 text-xs text-amber-600">Sem tokens restantes. Faça upgrade no plano.</div> : null}
+      {tokensRemaining <= 0 ? <div className="mt-2 text-xs text-red-300">Tokens esgotados.</div> : null}
     </div>
   );
 }

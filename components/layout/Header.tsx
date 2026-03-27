@@ -8,6 +8,11 @@ export function Header({ userEmail }: { userEmail: string }) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [loading, setLoading] = useState(false);
   const tokensRemaining = useChatStore((s) => s.tokensRemaining);
+  const tokensUsedTotal = useChatStore((s) => s.tokensUsedTotal);
+  const totalCapacity = Math.max(1, tokensRemaining + tokensUsedTotal);
+  const lowThreshold = totalCapacity * 0.1;
+  const isLow = tokensRemaining > 0 && tokensRemaining <= lowThreshold;
+  const isDepleted = tokensRemaining <= 0;
 
   async function signOut() {
     setLoading(true);
@@ -27,8 +32,10 @@ export function Header({ userEmail }: { userEmail: string }) {
       </div>
       <div className="flex items-center gap-2">
         <div className="rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs font-medium text-zinc-200">
-          Tokens: {tokensRemaining.toLocaleString()}
+          🪙 {tokensRemaining.toLocaleString("pt-BR")} tokens
         </div>
+        {isLow ? <div className="rounded-xl border border-red-500/60 bg-red-500/10 px-2 py-1 text-xs text-red-300">Tokens baixos!</div> : null}
+        {isDepleted ? <div className="rounded-xl border border-red-500/60 bg-red-500/10 px-2 py-1 text-xs text-red-300">Tokens esgotados</div> : null}
         <button
           disabled={loading}
           onClick={signOut}
