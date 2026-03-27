@@ -11,14 +11,14 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
   }
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-1 text-xs text-zinc-500 dark:border-zinc-700">
-        <span>{language || "code"}</span>
-        <button onClick={copy} className="rounded border px-2 py-0.5 text-[11px]">
+    <div className="overflow-hidden rounded-xl border border-zinc-700 bg-[#1e1e2e]">
+      <div className="flex items-center justify-between border-b border-zinc-700 bg-zinc-900/70 px-3 py-2 text-xs text-zinc-300">
+        <span className="font-mono uppercase tracking-wide">{language || "code"}</span>
+        <button onClick={copy} className="rounded-md border border-zinc-600 px-2 py-0.5 text-[11px] hover:bg-zinc-800">
           {copied ? "Copied" : "Copy"}
         </button>
       </div>
-      <pre className="overflow-x-auto p-3 text-xs">
+      <pre className="overflow-x-auto p-4 text-xs leading-6 text-zinc-100">
         <code>{code}</code>
       </pre>
     </div>
