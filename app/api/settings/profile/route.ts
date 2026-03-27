@@ -13,7 +13,9 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, email, full_name, avatar_url, tokens_remaining, tokens_used_total, plan_id")
+      .select(
+        "id, email, full_name, avatar_url, tokens_remaining, tokens_used_total, plan_id, consent_at, deleted_at, last_login_at, login_count, preferences",
+      )
       .eq("id", user.id)
       .single();
     if (error) throw error;
@@ -33,15 +35,30 @@ export async function PATCH(request: Request) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ data: null, error: "Unauthorized", meta: {} }, { status: 401 });
 
-    const body = (await request.json()) as { full_name?: string; avatar_url?: string };
+    const body = (await request.json()) as {
+      full_name?: string;
+      avatar_url?: string;
+      consent_at?: string;
+      consent_version?: string;
+      deactivate?: boolean;
+    };
+    const nextPreferences =
+      typeof body.consent_version === "string"
+        ? ({ consent_version: body.consent_version } as Record<string, unknown>)
+        : undefined;
     const { data, error } = await supabase
       .from("profiles")
       .update({
         full_name: body.full_name ?? null,
         avatar_url: body.avatar_url ?? null,
+        consent_at: body.consent_at ?? undefined,
+        deleted_at: body.deactivate ? new Date().toISOString() : undefined,
+        preferences: nextPreferences,
       })
       .eq("id", user.id)
-      .select("id, email, full_name, avatar_url, tokens_remaining, tokens_used_total, plan_id")
+      .select(
+        "id, email, full_name, avatar_url, tokens_remaining, tokens_used_total, plan_id, consent_at, deleted_at, last_login_at, login_count, preferences",
+      )
       .single();
     if (error) throw error;
 
