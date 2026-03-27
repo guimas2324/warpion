@@ -2,7 +2,7 @@ export const runtime = "nodejs";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import type { ChatRequestPayload } from "@/types/chat";
+import type { ChatRequestPayload, UiChatMessage } from "@/types/chat";
 import { processWithIntelligenceEngine } from "@/lib/ai/intelligence-engine";
 import { generateText } from "ai";
 import { getProviderModel } from "@/lib/ai/providers";
@@ -11,6 +11,42 @@ function getClientIp(request: Request) {
   const header = request.headers.get("x-forwarded-for");
   if (!header) return null;
   return header.split(",")[0]?.trim() || null;
+}
+
+function extractMessageText(input: unknown) {
+  if (typeof input === "string") return input.trim();
+  if (Array.isArray(input)) {
+    return input
+      .filter((part) => part && typeof part === "object" && "type" in part && "text" in part)
+      .filter((part) => (part as { type: unknown }).type === "text")
+      .map((part) => String((part as { text: unknown }).text ?? ""))
+      .join("")
+      .trim();
+  }
+  return "";
+}
+
+function normalizeHistory(rawHistory: unknown): UiChatMessage[] {
+  if (!Array.isArray(rawHistory)) return [];
+
+  return rawHistory
+    .map((message, index) => {
+      const msg = message as {
+        id?: unknown;
+        role?: unknown;
+        content?: unknown;
+        parts?: unknown;
+      };
+      const role = msg.role === "assistant" || msg.role === "system" ? msg.role : "user";
+      const content = extractMessageText(msg.content) || extractMessageText(msg.parts);
+      if (!content) return null;
+      return {
+        id: typeof msg.id === "string" && msg.id ? msg.id : `h-${index}`,
+        role,
+        content,
+      } satisfies UiChatMessage;
+    })
+    .filter((item): item is UiChatMessage => item !== null);
 }
 
 async function generateConversationTitle(params: {
@@ -58,9 +94,37 @@ export async function POST(request: Request) {
   if (!user) return new Response(JSON.stringify({ data: null, error: "Unauthorized", meta: {} }), { status: 401 });
 
   try {
-    const body = (await request.json()) as ChatRequestPayload;
-    const message = body.message?.trim();
+    const raw = (await request.json()) as {
+      message?: unknown;
+      messages?: unknown;
+      mode?: unknown;
+      model_id?: unknown;
+      conversation_id?: unknown;
+      history?: unknown;
+      attachments?: unknown;
+    };
+
+    let message = extractMessageText(raw.message);
+    if (!message && Array.isArray(raw.messages)) {
+      const lastUserMessage = [...raw.messages]
+        .reverse()
+        .find((item) => (item as { role?: unknown })?.role === "user") as
+        | { content?: unknown; parts?: unknown }
+        | undefined;
+      message = extractMessageText(lastUserMessage?.content) || extractMessageText(lastUserMessage?.parts);
+    }
+
     if (!message) return new Response(JSON.stringify({ data: null, error: "Message is required", meta: {} }), { status: 400 });
+
+    const history = normalizeHistory(raw.history ?? raw.messages);
+    const body = {
+      message,
+      mode: raw.mode === "manual" ? "manual" : "auto",
+      model_id: typeof raw.model_id === "string" ? raw.model_id : undefined,
+      conversation_id: typeof raw.conversation_id === "string" ? raw.conversation_id : undefined,
+      history,
+      attachments: Array.isArray(raw.attachments) ? raw.attachments : [],
+    } satisfies ChatRequestPayload;
 
     const { data: profileRow, error: profileError } = await supabase
       .from("profiles")
